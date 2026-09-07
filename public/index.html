@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎯 線上圍棋 - 無伺服器 P2P</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <h1>🎯 線上圍棋 Online Go <span class="badge-tag">P2P 無伺服器</span></h1>
+
+  <div id="lobby" class="screen">
+    <div id="lobbyHome">
+      <div class="panel">
+        <h2>⚔️ 選擇對戰模式</h2>
+
+        <div class="mode-grid">
+          <div class="mode-card">
+            <div class="mode-icon">👥</div>
+            <h3>單機雙人</h3>
+            <p>同一畫面兩人輪流下，適合共用裝置對弈</p>
+            <button class="btn primary full" data-action="hotseat">開始對弈</button>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-icon">📑</div>
+            <h3>分頁對弈</h3>
+            <p>同瀏覽器開兩個分頁，自動偵測彼此並連線</p>
+            <div style="display:flex;gap:10px;flex-direction:column">
+              <button class="btn full" data-action="local-start">建立房主分頁（黑棋）</button>
+              <button class="btn full secondary" data-action="local-join">加入對手分頁（白棋）</button>
+            </div>
+          </div>
+
+          <div class="mode-card">
+            <div class="mode-icon">🌐</div>
+            <h3>P2P 線上對弈</h3>
+            <p>跨裝置/跨瀏覽器連線，對手只需輸入邀請碼</p>
+            <div style="display:flex;gap:10px;flex-direction:column">
+              <button class="btn full" data-action="p2p-host">我是房主 · 建立邀請碼</button>
+              <button class="btn full secondary" data-action="goto-join">我是對手 · 輸入邀請碼</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>⚙️ 棋盤大小（進入前先設定）</h2>
+        <div class="form-row">
+          <label>棋盤大小：</label>
+          <select id="boardSize">
+            <option value="19">19 × 19（標準比賽）</option>
+            <option value="13">13 × 13（中級練習）</option>
+            <option value="9">9 × 9（入門快速）</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="p2pHostScreen" class="hidden">
+      <div class="sub-nav">
+        <button id="backFromHost" class="btn small">← 返回大廳</button>
+      </div>
+      <div class="panel host-panel">
+        <h2>🌐 房主 · 等待對手加入</h2>
+        <div class="steps">
+          <div class="step done"><span class="step-num">1</span> 產生邀請碼</div>
+          <div class="step active"><span class="step-num">2</span> 分享邀請碼給對手</div>
+          <div class="step"><span class="step-num">3</span> 對手加入並開始對弈</div>
+        </div>
+        <div class="code-box">
+          <div class="code-label">🎉 你的邀請碼</div>
+          <input type="text" id="p2pRoomCode" readonly placeholder="連線中..." class="room-code-input" style="max-width:380px;margin:0 auto">
+          <div class="code-actions">
+            <button id="copyRoomBtn" class="btn">📋 複製邀請碼</button>
+            <button id="shareRoomBtn" class="btn secondary">🔗 分享邀請連結</button>
+          </div>
+        </div>
+        <div id="p2pHostStatus" class="status-bar big-status pending">正在與 PeerJS 信令伺服器建立連線...</div>
+        <div class="tips">
+          <p>💡 將邀請碼或邀請連結傳送給朋友即可。朋友打開連結後會自動輸入邀請碼並加入。</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="p2pJoinScreen" class="hidden">
+      <div class="sub-nav">
+        <button id="backFromJoin" class="btn small">← 返回大廳</button>
+      </div>
+      <div class="panel join-panel">
+        <h2>🌐 對手 · 加入房主的對局</h2>
+        <div class="steps">
+          <div class="step active"><span class="step-num">1</span> 輸入邀請碼</div>
+          <div class="step"><span class="step-num">2</span> 與房主建立點對點連線</div>
+          <div class="step"><span class="step-num">3</span> 開始對弈</div>
+        </div>
+        <div class="code-box">
+          <div class="code-label">輸入房主給你的 6 位邀請碼</div>
+          <input type="text" id="p2pRoomInput" placeholder="例如：G7XK2M" maxlength="6" class="room-code-input" style="max-width:380px;margin:0 auto;letter-spacing:10px">
+          <div class="code-actions">
+            <button id="submitRoomBtn" class="btn primary big-btn">🚀 送出並加入對局</button>
+          </div>
+        </div>
+        <div id="p2pJoinStatus" class="status-bar big-status">等待輸入邀請碼...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameScreen" class="screen hidden">
+    <div class="game-layout">
+      <div class="game-info">
+        <div class="info-row">
+          <span class="label">連線模式：</span>
+          <span id="connMode" class="badge mode">單機</span>
+        </div>
+        <div class="info-row">
+          <span class="label">你的身分：</span>
+          <span id="myRole">-</span>
+        </div>
+        <div class="info-row">
+          <div class="player-card black">
+            <div class="stone-preview black"></div>
+            <div>
+              <div class="player-label">⚫ 黑棋 <span id="blackStatus">已就緒</span></div>
+              <div class="capture-count">提子：<span id="blackCaptures">0</span></div>
+            </div>
+          </div>
+          <div class="player-card white">
+            <div class="stone-preview white"></div>
+            <div>
+              <div class="player-label">⚪ 白棋 <span id="whiteStatus">已就緒</span></div>
+              <div class="capture-count">提子：<span id="whiteCaptures">0</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="turn-indicator" id="turnIndicator">
+          <span id="turnText">⚫ 黑棋先行</span>
+        </div>
+        <div class="info-row">
+          <span class="label">連線狀態：</span>
+          <span id="connStatus" class="badge ok">已連線</span>
+        </div>
+      </div>
+
+      <div class="board-container">
+        <canvas id="boardCanvas"></canvas>
+      </div>
+
+      <div class="game-controls">
+        <button id="passBtn" class="btn">⏭️ 虛手 (Pass)</button>
+        <button id="newGameBtn" class="btn">🔄 新對局</button>
+        <button id="leaveBtn" class="btn danger">🚪 返回大廳</button>
+        <div id="messageLog" class="message-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
