@@ -127,6 +127,80 @@ class GoGame {
     this.currentPlayer=BLACK;this.captures={[BLACK]:0,[WHITE]:0};this.history=[];
     this.koPoint=null;this.lastMove=null;this.passCount=0;this.gameOver=false;
   }
+  
+  // 中國規則數子法計分 (China Rules Scoring)
+  calculateChineseScore(komi = 7.5) {
+    const size = this.size;
+    const visited = Array.from({length: size}, () => Array(size).fill(false));
+    
+    let blackStones = 0;
+    let whiteStones = 0;
+    let blackTerritory = 0;
+    let whiteTerritory = 0;
+    let dame = 0;
+
+    for (let x = 0; x < size; x++) {
+      for (let y = 0; y < size; y++) {
+        if (this.board[x][y] === BLACK) blackStones++;
+        else if (this.board[x][y] === WHITE) whiteStones++;
+      }
+    }
+
+    for (let x = 0; x < size; x++) {
+      for (let y = 0; y < size; y++) {
+        if (this.board[x][y] === EMPTY && !visited[x][y]) {
+          const region = [];
+          const queue = [[x, y]];
+          visited[x][y] = true;
+          
+          let touchesBlack = false;
+          let touchesWhite = false;
+          
+          let head = 0;
+          while(head < queue.length) {
+            const [cx, cy] = queue[head++];
+            region.push([cx, cy]);
+            
+            for (const [nx, ny] of this.neighbors(cx, cy)) {
+              const c = this.board[nx][ny];
+              if (c === BLACK) touchesBlack = true;
+              else if (c === WHITE) touchesWhite = true;
+              else if (c === EMPTY && !visited[nx][ny]) {
+                visited[nx][ny] = true;
+                queue.push([nx, ny]);
+              }
+            }
+          }
+
+          if (touchesBlack && !touchesWhite) {
+            blackTerritory += region.length;
+          } else if (touchesWhite && !touchesBlack) {
+            whiteTerritory += region.length;
+          } else {
+            dame += region.length;
+          }
+        }
+      }
+    }
+
+    const blackTotal = blackStones + blackTerritory;
+    const whiteTotal = whiteStones + whiteTerritory + komi;
+    const winner = blackTotal > whiteTotal ? BLACK : WHITE;
+    const diff = Math.abs(blackTotal - whiteTotal);
+
+    return {
+      blackStones,
+      whiteStones,
+      blackTerritory,
+      whiteTerritory,
+      blackTotal,
+      whiteTotal,
+      komi,
+      winner,
+      diff
+    };
+  }
+
   getFullState(){
     return{
       size:this.size,
@@ -183,6 +257,9 @@ let undoRequestFrom = null;
 let roomCodeShared = null;
 let peerConnections = new Set();
 
+let isHost = false;
+let hostTakeoverInProgress = false;
+
 function $(id){return document.getElementById(id);}
 function b64encode(str){return btoa(unescape(encodeURIComponent(str)));}
 function b64decode(str){try{return decodeURIComponent(escape(atob(str)));}catch(e){return null;}}
@@ -193,6 +270,7 @@ function saveGameToStorage(){
   try{
     const payload={
       mode,myColor,
+      isHost,
       roomCode:p2pRoomCode||null,
       state:game.getFullState(),
       savedAt:Date.now()
@@ -233,6 +311,9 @@ $('resumeBtn')?.addEventListener('click',()=>{
   myColor=data.myColor;
   p2pRoomCode=data.roomCode||null;
   roomCodeShared=data.roomCode||null;
+  
+  isHost = data.isHost !== undefined ? data.isHost : (myColor === BLACK);
+
   if(mode==='hotseat'||mode==='local'){
     resumeGame(mode,myColor);
     if(mode==='local'){
@@ -260,15 +341,15 @@ $('resumeBtn')?.addEventListener('click',()=>{
     }
   }else if(mode==='p2p'){
     resumeGame('p2p',myColor);
-    if(myColor===BLACK&&data.roomCode){
+    if(isHost && data.roomCode){
       setConnStatus('🔄 重新建立房主連線（邀請碼 '+data.roomCode+'），等待對手重新加入...','warn');
-      setPlayerStatus(WHITE,'等待接手');
+      setPlayerStatus(myColor===BLACK ? WHITE : BLACK,'等待接手');
       addLog('正在重新開放房間 '+data.roomCode+'，對手可用邀請碼重新接手繼續對局','system');
       peerHostRoom(data.state.size,data.roomCode,true);
     }else{
       setConnStatus('等待房主重新建立房間並邀請加入...','warn');
       setP2PStatus('join','🔄 請聯繫房主重新建立房間後以邀請碼加入','warn');
-      addLog('你是 '+ (myColor===BLACK?'黑':'白') +' 棋，因你非房主，請聯繫房主重新建立房間後再加入以繼續對局','warn');
+      addLog('你是 '+ (myColor===BLACK?'黑':'白') +' 棋，因你非房主，請聯繫房主重開房間或等待房主接管後加入','warn');
     }
   }
 });
@@ -276,7 +357,6 @@ $('clearResumeBtn')?.addEventListener('click',()=>{
   clearSavedGame();$('resumeCard')?.classList.add('hidden');
 });
 
-/* ---------- 棋盤大小 radio 切換 ---------- */
 document.querySelectorAll('input[name="boardSize"]').forEach(r=>{
   r.addEventListener('change',()=>{
     document.querySelectorAll('.size-row label').forEach(l=>l.classList.remove('checked'));
@@ -458,7 +538,6 @@ if(boardCanvas){
 }
 window.addEventListener('resize',()=>{if(game){setupCanvas();drawBoard();}});
 
-/* ---------- Modal ---------- */
 let modalCallback=null;
 function showModal(title, body, callback){
   const t=$('modalTitle'),b=$('modalBody'),o=$('modalOverlay');
@@ -796,8 +875,17 @@ function updateUI(){
     ind.classList.remove('active-black','active-white','my-turn','game-over');
     if(game.gameOver){
       ind.classList.add('game-over');
-      const bs=game.captures[BLACK],ws=game.captures[WHITE]+6.5;
-      if(txt)txt.innerHTML=`對局結束！<br>黑提子 ${game.captures[BLACK]} · 白提子 ${game.captures[WHITE]} (+6.5 貼目)<br>${bs>ws?'黑棋領先':'白棋領先'} ${Math.abs(bs-ws).toFixed(1)} 目（僅計算提子）`;
+      
+      // 使用中國規則計分 (貼目 7.5 目)
+      const score = game.calculateChineseScore(7.5);
+      const winnerName = score.winner === BLACK ? '黑棋' : '白棋';
+      
+      if(txt)txt.innerHTML=`
+        對局結束（中國規則）！<br>
+        黑棋總點數：${score.blackTotal} (子:${score.blackStones} + 地:${score.blackTerritory})<br>
+        白棋總點數：${score.whiteTotal.toFixed(1)} (子:${score.whiteStones} + 地:${score.whiteTerritory} + 貼目:${score.komi})<br>
+        <b>${winnerName}勝 ${score.diff.toFixed(1)} 目</b>
+      `;
     }else{
       if(game.currentPlayer===BLACK)ind.classList.add('active-black');else ind.classList.add('active-white');
       const name=game.currentPlayer===BLACK?'黑棋':'白棋';
@@ -821,6 +909,8 @@ function leaveGame(){
   peerConn=null;
   pendingUndo=false;undoRequestFrom=null;
   hoverPos=null;
+  isHost = false;
+  hostTakeoverInProgress = false;
   clearSavedGame();
   game=null;mode=null;
   gameScreen?.classList.add('hidden');
@@ -830,13 +920,12 @@ function leaveGame(){
   if($('p2pRoomInput'))$('p2pRoomInput').value='';
 }
 
-/* ---------- BroadcastChannel 分頁連線 ---------- */
-function startLocal(isHost, size){
+function startLocal(isHostReq, size){
   if(typeof BroadcastChannel==='undefined'){
     alert('此瀏覽器不支援 BroadcastChannel，請改用 P2P 模式');
     return;
   }
-  const color=isHost?BLACK:WHITE;
+  const color=isHostReq?BLACK:WHITE;
   const ch=new BroadcastChannel('go-local-match-v2');
   let otherReady=false;
   const myNonce=Math.random().toString(36).slice(2);
@@ -874,18 +963,14 @@ function startLocal(isHost, size){
     }
   };
   startGame('local',size,color);
-  setConnStatus(isHost?'等待對手開啟另一分頁...':'嘗試連線房主...','warn');
-  addLog(isHost?'請在同一瀏覽器開新分頁並點「分頁加入」':'正在與房主分頁連線...','system');
+  setConnStatus(isHostReq?'等待對手開啟另一分頁...':'嘗試連線房主...','warn');
+  addLog(isHostReq?'請在同一瀏覽器開新分頁並點「分頁加入」':'正在與房主分頁連線...','system');
   t.send({type:'hello'});
   setTimeout(()=>{if(!otherReady){addLog('提示：對手需在同瀏覽器新分頁中點擊「分頁加入」按鈕','system');}},1500);
 }
 
-/* ---------- PeerJS P2P (房間邀請碼，支援中途接手 + 房主自動轉移) ---------- */
 let peerInst=null, peerConn=null, p2pSize=19, p2pRole=null, peerLoaded=(typeof Peer!=='undefined');
 let p2pRoomCode=null;
-let isHost=false;
-let hostTakeoverInProgress=false;
-let hostTakeoverTimer=null;
 
 function loadPeerJSFallback(){
   if(peerLoaded)return Promise.resolve(true);
@@ -916,7 +1001,7 @@ function attachPeerHandlers(size, role){
       setP2PStatus('host','就緒！邀請碼 '+code+'，等待對手加入...（對手離線時新朋友可接手）','ok');
       if(game){
         setConnStatus('🔗 房主連線就緒（邀請碼 '+code+'），等待對手加入/接手','ok');
-        addLog('房主重新連線就緒，邀請碼 '+code+' 已開放對手接手','good');
+        addLog('房間重啟就緒，邀請碼 '+code+' 開放對手接手','good');
       }else{
         addLog('邀請碼 '+code+' 已生效，等待對手加入','system');
       }
@@ -928,6 +1013,20 @@ function attachPeerHandlers(size, role){
     let existingConn=peerConn;
     conn.on('open',()=>{
       addLog('有新玩家嘗試連線房間...','system');
+      
+      conn.on('close', () => {
+        if (game && peerConn === conn) {
+          addLog('對手已離線！房間保持開放，等待新玩家接手...','error');
+          setConnStatus('對手離線 - 等待接手','off');
+          const otherColor = myColor === BLACK ? WHITE : BLACK;
+          setPlayerStatus(otherColor,'等待接手');
+          peerConn = null;
+          peerConnections.delete(conn);
+          saveGameToStorage();
+          addLog('提示：邀請碼 '+p2pRoomCode+' 仍然有效！將邀請碼傳送給新朋友即可接手。','system');
+        }
+      });
+
       conn.on('data',raw=>{
         try{
           const m=typeof raw==='string'?JSON.parse(raw):raw;
@@ -1007,14 +1106,14 @@ function attachPeerHandlers(size, role){
     const t=err&&err.type?err.type:'';
     const msg=err&&err.message?err.message:String(err);
     if(t==='unavailable-id'&&role==='host'){
-      setP2PStatus('host','邀請碼暫時被占用（信令伺服器尚未釋放），10 秒後重試...','warn');
-      addLog('邀請碼 ID 占用中，自動重試...','warn');
+      setP2PStatus('host','原房主連線尚未完全釋放，重試搶佔中...','warn');
+      addLog('等待信令伺服器釋放邀請碼，準備接管房間...','warn');
       const savedCode=p2pRoomCode;
       setTimeout(()=>{
         try{if(peerInst)peerInst.destroy();}catch(e){}
         peerInst=null;
         peerHostRoom(size,savedCode,true);
-      },10000);
+      }, 3000);
     }else if(t==='peer-unavailable'){
       if(role==='join'){
         setP2PStatus('join','找不到此邀請碼，確認是否正確','error');
@@ -1045,23 +1144,11 @@ function installConnHandlers(conn){
       addLog('收到異常資料：'+e.message,'error');
     }
   });
-  conn.on('close',()=>{
-    if(game){
-      addLog('對手已離線！等待新玩家前來接手...','error');
-      setConnStatus('對手離線 - 等待接手','off');
-      const otherColor=myColor===BLACK?WHITE:BLACK;
-      setPlayerStatus(otherColor,'等待接手');
-      if(peerConn===conn)peerConn=null;
-      peerConnections.delete(conn);
-      saveGameToStorage();
-      addLog('提示：邀請碼 '+p2pRoomCode+' 仍然有效！將邀請碼傳送給新朋友即可接手 '+
-        (otherColor===BLACK?'黑棋':'白棋') + ' 繼續對局。','system');
-    }
-  });
   conn.on('error',err=>{addLog('連線錯誤：'+JSON.stringify(err),'error');});
 }
 
 async function peerHostRoom(size, fixedCode=null, isRetry=false){
+  isHost = true;
   if(!fixedCode)setP2PStatus('host','連接 PeerJS 信令伺服器中...','pending');
   const code=fixedCode||genRoomCode();
   const samePeerAlive = peerInst && !peerInst.destroyed && (peerInst._roomCode===code);
@@ -1108,6 +1195,8 @@ async function peerHostRoom(size, fixedCode=null, isRetry=false){
 }
 
 async function peerJoinRoom(code){
+  isHost = false; 
+  hostTakeoverInProgress = false;
   code=code.toUpperCase().trim();
   if(!/^[A-Z2-9]{4,8}$/.test(code)){
     setP2PStatus('join','邀請碼格式錯誤（應為 4~8 位英數字）','error');return;
@@ -1193,17 +1282,22 @@ async function peerJoinRoom(code){
             addLog('連線資料錯誤：'+e.message,'error');
           }
         });
+
         c.on('close',()=>{
           if(!setupDone)return;
           if(game){
-            addLog('對手已離線！等待新玩家接手...','error');
-            setConnStatus('對手離線 - 等待接手','off');
-            const otherColor=myColor===BLACK?WHITE:BLACK;
-            setPlayerStatus(otherColor,'等待接手');
-            addLog('邀請碼 '+p2pRoomCode+' 仍然有效，可傳送給新朋友繼續接手對局！','system');
-            peerConnections.delete(c);
-            if(peerConn===c)peerConn=null;
-            saveGameToStorage();
+            if(isHost) return;
+            addLog('房主已離線！正在將你升級為新房主，以保持房間 ('+p2pRoomCode+') 開放...','warn');
+            setConnStatus('升級為房主中...','warn');
+            const otherColor = myColor === BLACK ? WHITE : BLACK;
+            setPlayerStatus(otherColor, '等待接手');
+            
+            if(peerInst){try{peerInst.destroy();}catch(e){}peerInst=null;}
+            peerConnections.clear();
+            peerConn=null;
+
+            hostTakeoverInProgress = true;
+            peerHostRoom(game.size, p2pRoomCode, true);
           }
         });
         c.on('error',err=>{clearTimeout(timeout);setP2PStatus('join','連線失敗：'+JSON.stringify(err),'error');});
@@ -1237,7 +1331,6 @@ function closeP2P(){
   p2pRole=null;
 }
 
-/* ---------- 自動偵測 URL 裡的 ?room= 參數 ---------- */
 (function autoJoin(){
   const run=()=>{
     try{
