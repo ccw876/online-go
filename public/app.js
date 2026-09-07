@@ -80,19 +80,17 @@ class GoGame {
     this.koPoint=cc===1?{x:cap[0][0],y:cap[0][1]}:null;
     this.lastMove={x,y};this.passCount=0;
     this.history.push({hash:prevHash,move:{x,y,p:this.currentPlayer},captured:cap,koPoint:this.koPoint});
-    const played=this.currentPlayer;
     this.currentPlayer=opp;
-    return{ok:true,x,y,player:played,captured:cap,captures:{...this.captures},koPoint:this.koPoint,lastMove:this.lastMove,passCount:this.passCount};
+    return{ok:true};
   }
   pass(){
     if(this.gameOver)return{ok:false,msg:'遊戲已結束'};
     this.passCount++;
     this.history.push({hash:this.hash(),move:{pass:true,p:this.currentPlayer},captured:[],koPoint:null});
     this.koPoint=null;this.lastMove=null;
-    const passing=this.currentPlayer;
     this.currentPlayer=this.currentPlayer===BLACK?WHITE:BLACK;
     if(this.passCount>=2)this.gameOver=true;
-    return{ok:true,pass:true,passingPlayer:passing,nextPlayer:this.currentPlayer,gameOver:this.gameOver,captures:{...this.captures},passCount:this.passCount};
+    return{ok:true};
   }
   undo(){
     if(this.history.length===0)return{ok:false,msg:'無棋可悔'};
@@ -108,7 +106,7 @@ class GoGame {
         if(this.captures[p]<0)this.captures[p]=0;
       }
       this.board[x][y]=EMPTY;
-      this.currentPlayer=p;
+      this.currentPlayer=p; // 悔棋後將輪次精確交還給悔棋者
       this.lastMove=this.history.length>0 && !this.history[this.history.length-1].move.pass
         ? {x:this.history[this.history.length-1].move.x, y:this.history[this.history.length-1].move.y}
         : null;
@@ -120,18 +118,17 @@ class GoGame {
     }
     this.gameOver=false;
     this.koPoint=last.koPoint;
-    return{ok:true,captures:{...this.captures},currentPlayer:this.currentPlayer,lastMove:this.lastMove,koPoint:this.koPoint};
+    return{ok:true};
   }
   reset(){
     this.board=Array.from({length:this.size},()=>Array(this.size).fill(EMPTY));
     this.currentPlayer=BLACK;this.captures={[BLACK]:0,[WHITE]:0};this.history=[];
     this.koPoint=null;this.lastMove=null;this.passCount=0;this.gameOver=false;
   }
-  
   calculateChineseScore(komi = 7.5) {
     const size = this.size;
     const visited = Array.from({length: size}, () => Array(size).fill(false));
-    let blackStones = 0, whiteStones = 0, blackTerritory = 0, whiteTerritory = 0, dame = 0;
+    let blackStones = 0, whiteStones = 0, blackTerritory = 0, whiteTerritory = 0;
 
     for (let x = 0; x < size; x++) {
       for (let y = 0; y < size; y++) {
@@ -163,18 +160,15 @@ class GoGame {
           }
           if (touchesBlack && !touchesWhite) blackTerritory += region.length;
           else if (touchesWhite && !touchesBlack) whiteTerritory += region.length;
-          else dame += region.length;
         }
       }
     }
-
     const blackTotal = blackStones + blackTerritory;
     const whiteTotal = whiteStones + whiteTerritory + komi;
     const winner = blackTotal > whiteTotal ? BLACK : WHITE;
     const diff = Math.abs(blackTotal - whiteTotal);
-    return { blackStones, whiteStones, blackTerritory, whiteTerritory, blackTotal, whiteTotal, komi, winner, diff };
+    return { winner, diff };
   }
-
   getFullState(){
     return{
       size:this.size,
@@ -189,6 +183,7 @@ class GoGame {
     };
   }
   loadFullState(s){
+    if(!s)return;
     this.size=s.size;
     this.board=s.board.map(r=>[...r]);
     this.currentPlayer=s.currentPlayer;
@@ -201,8 +196,6 @@ class GoGame {
   }
 }
 
-const lobby = document.getElementById('lobby');
-const gameScreen = document.getElementById('gameScreen');
 const boardCanvas = document.getElementById('boardCanvas');
 const ctx = boardCanvas ? boardCanvas.getContext('2d') : null;
 
@@ -212,12 +205,15 @@ let myColor = BLACK;
 let cellSize = 30;
 let margin = 30;
 let hoverPos = null;
-let transport = null;
 let pendingUndo = false;
-let undoRequestFrom = null;
-let roomCodeShared = null;
-let peerConnections = new Set();
+let activeConns = new Set();
+let peerInst = null;
+let p2pRoomCode = null;
 let isHost = false;
+let peerLoaded = (typeof Peer !== 'undefined');
+let localChannel = null;
+let myNonce = Math.random().toString(36).slice(2);
+let reconnectTimer = null;
 
 function $(id){return document.getElementById(id);}
 
@@ -225,94 +221,24 @@ function saveGameToStorage(){
   if(!game||!mode)return;
   try{
     const payload={
-      mode,myColor,isHost,
-      roomCode:p2pRoomCode||null,
-      state:game.getFullState(),
-      savedAt:Date.now()
+      mode, myColor, isHost,
+      roomCode: p2pRoomCode||null,
+      state: game.getFullState(),
+      savedAt: Date.now()
     };
-    localStorage.setItem(SAVE_KEY,JSON.stringify(payload));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
   }catch(e){}
 }
 function loadGameFromStorage(){
   try{
     const raw=localStorage.getItem(SAVE_KEY);
-    if(!raw)return null;
-    return JSON.parse(raw);
+    return raw ? JSON.parse(raw) : null;
   }catch(e){return null;}
 }
-function clearSavedGame(){
-  try{localStorage.removeItem(SAVE_KEY);}catch(e){}
-}
-function showResumeCardIfAvailable(){
-  const data=loadGameFromStorage();
-  const card=$('resumeCard');
-  const info=$('resumeInfo');
-  if(!data||!data.state){card?.classList.add('hidden');return;}
-  const s=data.state;
-  const moves=s.history.length;
-  const ageMin=Math.round((Date.now()-data.savedAt)/60000);
-  const modeTxt={hotseat:'單機雙人',local:'分頁連線',p2p:'P2P 線上'}[data.mode]||data.mode;
-  const roomTxt=data.roomCode?`，邀請碼 <b>${data.roomCode}</b>`:'';
-  info.innerHTML=`<b>${modeTxt}</b> · ${s.size}×${s.size}${roomTxt}<br>已下 <b>${moves}</b> 手 · 儲存於 ${ageMin<1?'剛剛':ageMin+' 分鐘前'}`;
-  card?.classList.remove('hidden');
-}
-
-$('resumeBtn')?.addEventListener('click',()=>{
-  const data=loadGameFromStorage();
-  if(!data||!data.state)return;
-  game=new GoGame(data.state.size);
-  game.loadFullState(data.state);
-  mode=data.mode;
-  myColor=data.myColor;
-  p2pRoomCode=data.roomCode||null;
-  roomCodeShared=data.roomCode||null;
-  isHost = data.isHost !== undefined ? data.isHost : (myColor === BLACK);
-
-  if(mode==='hotseat'||mode==='local'){
-    resumeGame(mode,myColor);
-    if(mode==='local'){
-      const ch=new BroadcastChannel('go-local-match-v3');
-      const myNonce=Math.random().toString(36).slice(2);
-      transport={
-        send(msg){try{ch.postMessage({...msg,_from:myNonce});}catch(e){}},
-        close(){try{ch.close();}catch(e){}}
-      };
-      ch.onmessage=(e)=>{
-        const m=e.data;if(!m||m._from===myNonce)return;
-        if(m.type==='hello'){transport.send({type:'helloAck',size:game.size});setConnStatus('對手已就緒','ok');}
-        else if(m.type==='helloAck'){setConnStatus('連線成功','ok');}
-        else if(m.type==='move')applyMoveRemote(m.result);
-        else if(m.type==='pass')applyPassRemote(m.result);
-        else if(m.type==='newGame')doNewGame(true);
-        else if(m.type==='undoRequest')onUndoRequest(m.player);
-        else if(m.type==='undoAccept')onUndoAccept(m);
-        else if(m.type==='undoReject')onUndoReject();
-      };
-      transport.send({type:'hello'});
-    }
-  }else if(mode==='p2p'){
-    resumeGame('p2p',myColor);
-    if(isHost && data.roomCode){
-      peerHostRoom(data.state.size,data.roomCode,true);
-    }else{
-      setP2PStatus('join','🔄 請聯繫房主重新建立房間後以邀請碼加入','warn');
-    }
-  }
-});
-$('clearResumeBtn')?.addEventListener('click',()=>{
-  clearSavedGame();$('resumeCard')?.classList.add('hidden');
-});
-
-document.querySelectorAll('input[name="boardSize"]').forEach(r=>{
-  r.addEventListener('change',()=>{
-    document.querySelectorAll('.size-row label').forEach(l=>l.classList.remove('checked'));
-    r.parentElement.classList.add('checked');
-  });
-});
+function clearSavedGame(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
 
 function addLog(text, cls=''){
-  const log=$('messageLog');
-  if(!log)return;
+  const log=$('messageLog');if(!log)return;
   const el=document.createElement('div');
   el.className='log-entry '+(cls||'');
   const t=new Date().toLocaleTimeString('zh-TW',{hour12:false});
@@ -320,9 +246,157 @@ function addLog(text, cls=''){
   log.appendChild(el);log.scrollTop=log.scrollHeight;
 }
 function setConnStatus(text, cls='ok'){const s=$('connStatus');if(s){s.textContent=text;s.className='badge '+cls;}}
-function setPlayerStatus(color, text){const el=$(color===BLACK?'blackStatus':'whiteStatus');if(el)el.textContent=text;}
 function setP2PStatus(which, text, cls=''){const el=$(which==='host'?'p2pHostStatus':'p2pJoinStatus');if(el){el.textContent=text;el.className='status '+(cls||'');}}
-function canPlay(){if(!game||game.gameOver)return false;if(mode==='hotseat')return true;return game.currentPlayer===myColor;}
+
+function canPlay(){
+  if(!game || game.gameOver || pendingUndo) return false;
+  if(mode === 'hotseat') return true;
+  return game.currentPlayer === myColor;
+}
+
+function broadcast(msg){
+  const str = typeof msg === 'string' ? msg : JSON.stringify(msg);
+  if(mode === 'local' && localChannel){
+    try{ localChannel.postMessage({...msg, _from: myNonce}); }catch(e){}
+    return;
+  }
+  for(const conn of activeConns){
+    if(conn && conn.open){
+      try{ conn.send(str); }catch(e){}
+    }
+  }
+}
+
+function handleRemoteMessage(m){
+  if(!m || !m.type) return;
+  switch(m.type){
+    case 'syncState':
+      if(m.state && game){
+        game.loadFullState(m.state);
+        pendingUndo = false;
+        updateUI(); drawBoard(); saveGameToStorage();
+      }
+      break;
+
+    case 'hello':
+      const myLen = game ? game.history.length : -1;
+      const remoteLen = m.historyLength || 0;
+      if(remoteLen > myLen && m.state){
+        if(!game) game = new GoGame(m.state.size);
+        game.loadFullState(m.state);
+      }
+      broadcast({
+        type: 'syncResponse',
+        state: game ? game.getFullState() : null,
+        historyLength: game ? game.history.length : 0,
+        hostColor: isHost ? myColor : (myColor === BLACK ? BLACK : WHITE)
+      });
+      setConnStatus('對手已連線', 'ok');
+      addLog('對手已成功連線並完成同步', 'good');
+      updateUI(); drawBoard(); saveGameToStorage();
+      break;
+
+    case 'syncResponse':
+      if(m.state && game){
+        if((m.historyLength || 0) >= game.history.length){
+          game.loadFullState(m.state);
+        }
+      }
+      if(m.hostColor !== undefined && !isHost){
+        myColor = (m.hostColor === BLACK) ? WHITE : BLACK;
+        $('myRole').textContent = (myColor === BLACK ? '黑棋' : '白棋');
+      }
+      setConnStatus('連線與進度同步成功', 'ok');
+      addLog('連線成功，已同步最新棋盤進度', 'good');
+      updateUI(); drawBoard(); saveGameToStorage();
+      break;
+
+    case 'undoRequest':
+      onUndoRequest(m.from);
+      break;
+
+    case 'undoAccept':
+      pendingUndo = false;
+      if(m.state && game){
+        game.loadFullState(m.state);
+        updateUI(); drawBoard(); saveGameToStorage();
+        addLog('對方已同意悔棋！棋盤已同步，輪到你落子', 'good');
+      }
+      break;
+
+    case 'undoReject':
+      pendingUndo = false;
+      updateUI();
+      addLog('對方拒絕了悔棋請求', 'error');
+      break;
+
+    case 'newGame':
+      if(game){
+        game.reset(); pendingUndo = false;
+        updateUI(); drawBoard(); saveGameToStorage();
+        addLog('對手發起了新對局', 'system');
+      }
+      break;
+  }
+}
+
+function doMove(x,y){
+  if(!canPlay()) return;
+  const r = game.place(x,y);
+  if(!r.ok){ addLog(r.msg, 'error'); return; }
+  broadcast({ type: 'syncState', state: game.getFullState() });
+  updateUI(); drawBoard(); saveGameToStorage();
+}
+
+function doPass(){
+  if(!canPlay()) return;
+  const r = game.pass();
+  if(!r.ok) return;
+  broadcast({ type: 'syncState', state: game.getFullState() });
+  updateUI(); drawBoard(); saveGameToStorage();
+}
+
+function requestUndo(){
+  if(!game || game.history.length === 0){ addLog('無棋可悔', 'error'); return; }
+  if(mode === 'hotseat'){
+    game.undo(); updateUI(); drawBoard(); saveGameToStorage(); return;
+  }
+  if(pendingUndo){ addLog('已有等待中的悔棋請求', 'warn'); return; }
+  
+  const last = game.history[game.history.length - 1];
+  if(last.move.p !== myColor){
+    addLog('只能悔自己剛下的棋子！', 'error'); return;
+  }
+  
+  pendingUndo = true;
+  updateUI();
+  broadcast({ type: 'undoRequest', from: myColor });
+  addLog('已送出悔棋請求，等待對方同意...', 'system');
+}
+
+function onUndoRequest(fromColor){
+  if(!game || game.history.length === 0) return;
+  showModal('悔棋請求', '對手請求悔棋，是否同意？', agree => {
+    if(agree){
+      const r = game.undo();
+      if(r.ok){
+        pendingUndo = false;
+        updateUI(); drawBoard(); saveGameToStorage();
+        broadcast({ type: 'undoAccept', state: game.getFullState() });
+        addLog('你已同意悔棋，棋盤已更新', 'good');
+      }
+    }else{
+      broadcast({ type: 'undoReject' });
+    }
+  });
+}
+
+function doNewGame(fromRemote=false){
+  if(!game) return;
+  game.reset(); pendingUndo = false;
+  if(!fromRemote) broadcast({ type: 'newGame' });
+  updateUI(); drawBoard(); saveGameToStorage();
+}
 
 function setupCanvas(){
   if(!game||!boardCanvas||!ctx)return;
@@ -486,11 +560,11 @@ function handleAction(act){
 
 function startGame(m, size, color){
   mode=m;myColor=color;game=new GoGame(size);
-  lobby?.classList.add('hidden');gameScreen?.classList.remove('hidden');
+  $('lobby')?.classList.add('hidden');$('gameScreen')?.classList.remove('hidden');
   $('connMode').textContent=m==='hotseat'?'單機雙人':(m==='local'?'分頁連線':'P2P 線上');
   $('myRole').textContent=m==='hotseat'?'雙人共用':(color===BLACK?'黑棋':'白棋');
   $('messageLog').innerHTML='';
-  pendingUndo=false;undoRequestFrom=null;
+  pendingUndo=false;
   addLog('對局開始！','system');
   updateUI();saveGameToStorage();
   setTimeout(()=>{setupCanvas();drawBoard();},100);
@@ -498,106 +572,12 @@ function startGame(m, size, color){
 
 function resumeGame(m, color){
   mode=m;myColor=color;
-  lobby?.classList.add('hidden');gameScreen?.classList.remove('hidden');
+  $('lobby')?.classList.add('hidden');$('gameScreen')?.classList.remove('hidden');
   $('connMode').textContent=m==='hotseat'?'單機雙人':(m==='local'?'分頁連線':'P2P 線上');
   $('myRole').textContent=m==='hotseat'?'雙人共用':(color===BLACK?'黑棋':'白棋');
   pendingUndo=false;
   updateUI();saveGameToStorage();
   setTimeout(()=>{setupCanvas();drawBoard();},100);
-}
-
-function applyMoveRemote(r){
-  if(!r.ok||!game)return;
-  const prevHash=game.hash();
-  if(r.captured&&r.captured.length)for(const[cx,cy]of r.captured)game.board[cx][cy]=EMPTY;
-  game.board[r.x][r.y]=r.player;
-  game.currentPlayer=r.player===BLACK?WHITE:BLACK;
-  game.captures=r.captures;game.lastMove=r.lastMove;game.koPoint=r.koPoint;
-  game.passCount=r.passCount||0;
-  game.history.push({hash:prevHash,move:{x:r.x,y:r.y,p:r.player},captured:r.captured||[],koPoint:r.koPoint?{...r.koPoint}:null});
-  updateUI();drawBoard();saveGameToStorage();
-}
-
-function applyPassRemote(r){
-  if(!game)return;
-  game.captures=r.captures;
-  game.history.push({hash:game.hash(),move:{pass:true,p:r.passingPlayer},captured:[],koPoint:null});
-  game.currentPlayer=r.nextPlayer;
-  game.lastMove=null;game.koPoint=null;game.passCount=r.passCount||1;
-  if(r.gameOver)game.gameOver=true;
-  updateUI();drawBoard();saveGameToStorage();
-}
-
-function doMove(x,y){
-  if(!game)return;
-  const r=game.place(x,y);
-  if(!r.ok){addLog(r.msg,'error');return;}
-  sendMessage({type:'move',result:r});
-  updateUI();drawBoard();saveGameToStorage();
-}
-function doPass(){
-  if(!game)return;
-  const r=game.pass();
-  if(!r.ok)return;
-  sendMessage({type:'pass',result:r});
-  updateUI();drawBoard();saveGameToStorage();
-}
-function doNewGame(fromRemote=false){
-  if(!game)return;
-  game.reset();pendingUndo=false;
-  if(!fromRemote)sendMessage({type:'newGame'});
-  updateUI();drawBoard();saveGameToStorage();
-}
-
-function sendMessage(msg){
-  if(transport){try{transport.send(msg);return true;}catch(e){}}
-  if(peerConn&&peerConn.open){try{peerConn.send(JSON.stringify(msg));return true;}catch(e){}}
-  for(const c of peerConnections){try{if(c&&c.open){c.send(JSON.stringify(msg));return true;}}catch(e){}}
-  return false;
-}
-
-function requestUndo(){
-  if(!game||game.history.length===0){addLog('無棋可悔','error');return;}
-  if(mode==='hotseat'){
-    game.undo();updateUI();drawBoard();saveGameToStorage();return;
-  }
-  if(pendingUndo){addLog('已有等待中的悔棋請求','warn');return;}
-  const last=game.history[game.history.length-1];
-  if(last.move.p!==myColor){addLog('只能悔自己走的棋','error');return;}
-  sendMessage({type:'undoRequest',player:myColor});
-  pendingUndo=true;
-  addLog('已送出悔棋請求，等待對方同意...','system');
-}
-
-function onUndoRequest(fromColor){
-  if(!game||game.history.length===0)return;
-  showModal('悔棋請求','對手請求悔棋，是否同意？',agree=>{
-    if(agree){
-      const r=game.undo();
-      if(r.ok){
-        updateUI();drawBoard();
-        const state=game.getFullState();
-        sendMessage({type:'undoAccept',player:myColor,state:state});
-        addLog('已同意悔棋，棋盤狀態已同步，輪到你落子','good');
-        saveGameToStorage();
-      }
-    }else{
-      sendMessage({type:'undoReject',player:myColor});
-    }
-  });
-}
-
-function onUndoAccept(msg){
-  pendingUndo=false;
-  if(msg&&msg.state){
-    game.loadFullState(msg.state);
-    updateUI();drawBoard();saveGameToStorage();
-    addLog('對方已同意悔棋！棋盤已同步，目前輪到你落子','good');
-  }
-}
-function onUndoReject(){
-  pendingUndo=false;
-  addLog('對方已拒絕悔棋','error');
 }
 
 function updateUI(){
@@ -621,37 +601,29 @@ function updateUI(){
 }
 
 function leaveGame(){
-  if(transport)try{transport.close();}catch(e){}
-  if(peerInst)try{peerInst.destroy();}catch(e){}
-  peerConnections.clear();peerConn=null;transport=null;game=null;mode=null;
+  if(reconnectTimer) clearInterval(reconnectTimer);
+  if(localChannel) try{ localChannel.close(); }catch(e){}
+  if(peerInst) try{ peerInst.destroy(); }catch(e){}
+  activeConns.clear(); game=null; mode=null;
   clearSavedGame();
-  gameScreen?.classList.add('hidden');lobby?.classList.remove('hidden');
+  $('gameScreen')?.classList.add('hidden');$('lobby')?.classList.remove('hidden');
   showLobbyHome();
 }
 
 function startLocal(isHostReq, size){
   const color=isHostReq?BLACK:WHITE;
-  const ch=new BroadcastChannel('go-local-match-v3');
-  const myNonce=Math.random().toString(36).slice(2);
-  transport={
-    send(msg){try{ch.postMessage({...msg,_from:myNonce});}catch(e){}},
-    close(){try{ch.close();}catch(e){}}
-  };
-  ch.onmessage=(e)=>{
+  localChannel=new BroadcastChannel('go-local-match-v4');
+  localChannel.onmessage=(e)=>{
     const m=e.data;if(!m||m._from===myNonce)return;
-    if(m.type==='hello')transport.send({type:'helloAck'});
-    else if(m.type==='move')applyMoveRemote(m.result);
-    else if(m.type==='pass')applyPassRemote(m.result);
-    else if(m.type==='newGame')doNewGame(true);
-    else if(m.type==='undoRequest')onUndoRequest(m.player);
-    else if(m.type==='undoAccept')onUndoAccept(m);
-    else if(m.type==='undoReject')onUndoReject();
+    handleRemoteMessage(m);
   };
   startGame('local',size,color);
-  transport.send({type:'hello'});
+  broadcast({
+    type:'hello',
+    historyLength: game.history.length,
+    state: game.getFullState()
+  });
 }
-
-let peerInst=null, peerConn=null, p2pRoomCode=null, peerLoaded=(typeof Peer!=='undefined');
 
 function loadPeerJS(){
   if(peerLoaded)return Promise.resolve(true);
@@ -663,120 +635,149 @@ function loadPeerJS(){
     document.head.appendChild(s);
   });
 }
+
 function genCode(){
   const s='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let c='';for(let i=0;i<6;i++)c+=s[Math.floor(Math.random()*s.length)];
   return c;
 }
 
-function attachPeerHandlers(size, role){
-  peerInst.on('open',id=>{
-    if(role==='host'){
-      $('p2pRoomCode').value=p2pRoomCode;
-      setP2PStatus('host','就緒！邀請碼 '+p2pRoomCode+'，等待對手加入...','ok');
+function bindConnEvents(conn){
+  activeConns.add(conn);
+  conn.on('open', ()=>{
+    setConnStatus('已連線', 'ok');
+    conn.send(JSON.stringify({
+      type: 'hello',
+      historyLength: game ? game.history.length : 0,
+      state: game ? game.getFullState() : null
+    }));
+  });
+
+  conn.on('data', raw => {
+    let m = raw;
+    if(typeof raw === 'string'){
+      try{ m = JSON.parse(raw); }catch(e){}
     }
+    handleRemoteMessage(m);
   });
-  peerInst.on('connection',conn=>{
-    conn.on('open',()=>{
-      conn.on('data',raw=>{
-        const m=typeof raw==='string'?JSON.parse(raw):raw;
-        if(!m)return;
-        if(m.type==='hello'){
-          if(game){
-            const assigned=(myColor===BLACK)?WHITE:BLACK;
-            conn.send(JSON.stringify({type:'takeOver',color:assigned,state:game.getFullState()}));
-          }else{
-            peerConn=conn;peerConnections.add(conn);
-            peerDataReady(conn, BLACK, size);
-          }
-        }else if(m.type==='takeOverAck'){
-          peerConn=conn;peerConnections.add(conn);
-          installConnHandlers(conn);
-          setConnStatus('對手已成功接手','ok');
-        }
-      });
-      conn.send(JSON.stringify({type:'helloAck',hasGame:!!game,myColor:myColor}));
-    });
+
+  conn.on('close', ()=>{
+    activeConns.delete(conn);
+    setConnStatus('對手連線中斷，嘗試重連...', 'warn');
+    scheduleAutoReconnect();
+  });
+
+  conn.on('error', ()=>{
+    activeConns.delete(conn);
   });
 }
 
-function installConnHandlers(conn){
-  conn.on('data',raw=>{
-    const m=typeof raw==='string'?JSON.parse(raw):raw;
-    if(!m)return;
-    if(m.type==='move')applyMoveRemote(m.result);
-    else if(m.type==='pass')applyPassRemote(m.result);
-    else if(m.type==='newGame')doNewGame(true);
-    else if(m.type==='undoRequest')onUndoRequest(m.player);
-    else if(m.type==='undoAccept')onUndoAccept(m);
-    else if(m.type==='undoReject')onUndoReject();
-  });
+function scheduleAutoReconnect(){
+  if(reconnectTimer || !p2pRoomCode || mode !== 'p2p') return;
+  reconnectTimer = setInterval(() => {
+    if(activeConns.size > 0){
+      clearInterval(reconnectTimer);
+      reconnectTimer = null;
+      return;
+    }
+    if(!isHost){
+      peerJoinRoom(p2pRoomCode, true);
+    }
+  }, 4000);
 }
 
-async function peerHostRoom(size, fixedCode=null, isRetry=false){
+async function peerHostRoom(size, fixedCode=null){
   isHost=true;
   const code=fixedCode||genCode();
+  p2pRoomCode=code;
   if(peerInst){try{peerInst.destroy();}catch(e){}}
   if(!peerLoaded&&!(await loadPeerJS()))return;
-  p2pRoomCode=code;
-  // 關鍵：明確宣告 secure: true 與 port: 443 以確保 GitHub Pages (HTTPS) 正常連線
+
+  // 強制 secure: true 與 port: 443 以符合 GitHub Pages HTTPS
   peerInst=new Peer('GO-'+code,{
-    debug:1,
-    secure:true,
-    port:443,
+    debug:1, secure:true, port:443,
     config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}
   });
-  attachPeerHandlers(size,'host');
+
+  peerInst.on('open', id=>{
+    $('p2pRoomCode').value=p2pRoomCode;
+    setP2PStatus('host','就緒！邀請碼 '+p2pRoomCode+'，等待對手加入...','ok');
+    if(!game) startGame('p2p', size, BLACK);
+  });
+
+  peerInst.on('connection', conn=>{
+    bindConnEvents(conn);
+  });
+
+  peerInst.on('error', err=>{
+    if(err.type==='unavailable-id'){
+      // 房間 ID 仍存在，嘗試恢復
+      setTimeout(()=>peerHostRoom(size, code), 2000);
+    }
+  });
 }
 
-async function peerJoinRoom(code){
+async function peerJoinRoom(code, isSilent=false){
   isHost=false;
   code=code.toUpperCase().trim();
   p2pRoomCode=code;
-  setP2PStatus('join','正在連接房間 '+code+' ...','pending');
-  if(peerInst){try{peerInst.destroy();}catch(e){}}
+  if(!isSilent) setP2PStatus('join','正在連接房間 '+code+' ...','pending');
+
+  if(peerInst && !peerInst.destroyed){try{peerInst.destroy();}catch(e){}}
   if(!peerLoaded&&!(await loadPeerJS()))return;
 
   peerInst=new Peer({
-    debug:1,
-    secure:true,
-    port:443,
+    debug:1, secure:true, port:443,
     config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]}
   });
-  peerInst.on('open',()=>{
-    const c=peerInst.connect('GO-'+code,{reliable:true});
-    c.on('open',()=>{
-      peerConn=c;peerConnections.add(c);
-      c.send(JSON.stringify({type:'hello'}));
-      c.on('data',raw=>{
-        const m=typeof raw==='string'?JSON.parse(raw):raw;
-        if(!m)return;
-        if(m.type==='helloAck'&&!m.hasGame){
-          peerDataReady(c, WHITE, 19);
-        }else if(m.type==='takeOver'){
-          game=new GoGame(m.state.size);
-          game.loadFullState(m.state);
-          resumeGame('p2p', m.color);
-          installConnHandlers(c);
-          c.send(JSON.stringify({type:'takeOverAck'}));
-          setConnStatus('接手連線成功','ok');
-        }
-      });
-    });
+
+  peerInst.on('open', ()=>{
+    const conn = peerInst.connect('GO-'+code, {reliable:true});
+    bindConnEvents(conn);
+    if(!game){
+      startGame('p2p', 19, WHITE);
+    }
   });
 }
 
-function peerDataReady(conn, color, size){
-  transport={
-    send(msg){try{conn.send(JSON.stringify(msg));}catch(e){}},
-    close(){try{conn.close();}catch(e){}}
-  };
-  installConnHandlers(conn);
-  if(!game)startGame('p2p',size,color);
-  setConnStatus('P2P 連線成功','ok');
-  addLog('P2P 點對點連線建立成功！','good');
-  saveGameToStorage();
+function showResumeCardIfAvailable(){
+  const data=loadGameFromStorage();
+  const card=$('resumeCard'), info=$('resumeInfo');
+  if(!data||!data.state){card?.classList.add('hidden');return;}
+  const s=data.state;
+  const moves=s.history.length;
+  const ageMin=Math.round((Date.now()-data.savedAt)/60000);
+  const modeTxt={hotseat:'單機雙人',local:'分頁連線',p2p:'P2P 線上'}[data.mode]||data.mode;
+  const roomTxt=data.roomCode?`，邀請碼 <b>${data.roomCode}</b>`:'';
+  info.innerHTML=`<b>${modeTxt}</b> · ${s.size}×${s.size}${roomTxt}<br>已下 <b>${moves}</b> 手 · 儲存於 ${ageMin<1?'剛剛':ageMin+' 分鐘前'}`;
+  card?.classList.remove('hidden');
 }
+
+$('resumeBtn')?.addEventListener('click',()=>{
+  const data=loadGameFromStorage();
+  if(!data||!data.state)return;
+  game=new GoGame(data.state.size);
+  game.loadFullState(data.state);
+  mode=data.mode;
+  myColor=data.myColor;
+  p2pRoomCode=data.roomCode||null;
+  isHost = data.isHost !== undefined ? data.isHost : (myColor === BLACK);
+
+  resumeGame(mode, myColor);
+  if(mode==='local'){
+    startLocal(isHost, game.size);
+  }else if(mode==='p2p' && p2pRoomCode){
+    if(isHost){
+      peerHostRoom(game.size, p2pRoomCode);
+    }else{
+      peerJoinRoom(p2pRoomCode);
+    }
+  }
+});
+
+$('clearResumeBtn')?.addEventListener('click',()=>{
+  clearSavedGame();$('resumeCard')?.classList.add('hidden');
+});
 
 (function autoJoin(){
   try{
@@ -787,6 +788,8 @@ function peerDataReady(conn, color, size){
         $('p2pRoomInput').value=r.toUpperCase();
         peerJoinRoom(r);
       },300);
+    }else{
+      showResumeCardIfAvailable();
     }
   }catch(e){}
 })();
