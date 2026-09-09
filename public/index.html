@@ -6,180 +6,307 @@
 <title>線上圍棋</title>
 <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
+
 <div id="modalOverlay" class="modal-overlay hidden">
   <div class="modal">
     <div class="modal-title" id="modalTitle">確認</div>
     <div class="modal-body" id="modalBody">是否執行此操作？</div>
+
     <div class="modal-actions">
       <button id="modalCancel" class="btn ghost modal-btn">取消</button>
       <button id="modalOk" class="btn primary modal-btn">確定</button>
     </div>
   </div>
 </div>
+
 <div id="app">
+
   <header class="app-header">
     <h1>🎯 線上圍棋</h1>
   </header>
 
+  <!-- ==================== 大廳 ==================== -->
   <div id="lobby" class="screen">
+
     <div id="lobbyHome">
+
       <section class="card">
         <h2>對戰模式</h2>
+
         <div class="mode-grid">
+
           <button class="mode-btn" data-action="hotseat">
             <div class="mode-emoji">👥</div>
             <div class="mode-title">單機雙人</div>
             <div class="mode-desc">同一畫面兩人輪流</div>
           </button>
-          <button class="mode-btn" data-action="local-start">
-            <div class="mode-emoji">📑</div>
-            <div class="mode-title">分頁房主</div>
-            <div class="mode-desc">同瀏覽器兩分頁對弈</div>
-          </button>
-          <button class="mode-btn" data-action="local-join">
-            <div class="mode-emoji">🔗</div>
-            <div class="mode-title">分頁加入</div>
-            <div class="mode-desc">加入房主分頁</div>
-          </button>
+
           <button class="mode-btn" data-action="p2p-host">
             <div class="mode-emoji">🌐</div>
             <div class="mode-title">建立房間</div>
             <div class="mode-desc">產生邀請碼</div>
           </button>
+
           <button class="mode-btn" data-action="goto-join">
             <div class="mode-emoji">🎟️</div>
             <div class="mode-title">加入房間</div>
             <div class="mode-desc">輸入邀請碼</div>
           </button>
+
         </div>
       </section>
 
+      <!-- 棋盤大小 -->
       <section class="card">
         <h2>棋盤大小</h2>
+
         <div class="size-row">
-          <label>
+
+          <label class="checked">
             <input type="radio" name="boardSize" value="9">
             <span>9 × 9</span>
             <small>入門</small>
           </label>
+
           <label>
             <input type="radio" name="boardSize" value="13">
             <span>13 × 13</span>
             <small>中級</small>
           </label>
-          <label class="checked">
+
+          <label>
             <input type="radio" name="boardSize" value="19" checked>
             <span>19 × 19</span>
             <small>標準</small>
           </label>
+
         </div>
       </section>
 
+      <!-- 恢復對局 -->
       <section id="resumeCard" class="card hidden">
         <h2>恢復對局</h2>
+
         <div id="resumeInfo" class="resume-info"></div>
+
         <div class="resume-actions">
-          <button id="resumeBtn" class="btn primary">繼續上一局</button>
-          <button id="clearResumeBtn" class="btn ghost">清除記錄</button>
+          <button id="resumeBtn" class="btn primary">
+            繼續上一局
+          </button>
+
+          <button id="clearResumeBtn" class="btn ghost">
+            清除記錄
+          </button>
         </div>
       </section>
+
     </div>
 
+    <!-- ==================== 建立房間 ==================== -->
     <div id="p2pHostScreen" class="hidden">
+
       <div class="sub-nav">
-        <button id="backFromHost" class="btn ghost small">← 返回</button>
+        <button id="backFromHost" class="btn ghost small">
+          ← 返回
+        </button>
       </div>
+
       <section class="card">
         <h2>等待對手加入</h2>
+
         <div class="code-display">
-          <div class="code-label">邀請碼</div>
-          <input type="text" id="p2pRoomCode" readonly class="room-code-input">
-          <div class="row">
-            <button id="copyRoomBtn" class="btn">複製</button>
-            <button id="shareRoomBtn" class="btn ghost">分享連結</button>
+
+          <div class="code-label">
+            邀請碼
           </div>
+
+          <input
+            type="text"
+            id="p2pRoomCode"
+            readonly
+            class="room-code-input"
+          >
+
+          <div class="row">
+            <button id="copyRoomBtn" class="btn">
+              複製
+            </button>
+
+            <button id="shareRoomBtn" class="btn ghost">
+              分享連結
+            </button>
+          </div>
+
         </div>
-        <div id="p2pHostStatus" class="status pending">連線中...</div>
+
+        <div id="p2pHostStatus" class="status pending">
+          連線中...
+        </div>
+
       </section>
     </div>
 
+    <!-- ==================== 加入房間 ==================== -->
     <div id="p2pJoinScreen" class="hidden">
+
       <div class="sub-nav">
-        <button id="backFromJoin" class="btn ghost small">← 返回</button>
+        <button id="backFromJoin" class="btn ghost small">
+          ← 返回
+        </button>
       </div>
+
       <section class="card">
+
         <h2>加入房間</h2>
+
         <div class="code-display">
-          <div class="code-label">輸入邀請碼</div>
-          <input type="text" id="p2pRoomInput" placeholder="例如：G7XK2M" maxlength="6" class="room-code-input">
-          <button id="submitRoomBtn" class="btn primary big">加入</button>
+
+          <div class="code-label">
+            輸入邀請碼
+          </div>
+
+          <input
+            type="text"
+            id="p2pRoomInput"
+            placeholder="例如：G7XK2M"
+            maxlength=""
+            class="room-code-input"
+          >
+
+          <button id="submitRoomBtn" class="btn primary big">
+            加入
+          </button>
+
         </div>
-        <div id="p2pJoinStatus" class="status">等待輸入邀請碼</div>
+
+        <div id="p2pJoinStatus" class="status">
+          等待輸入邀請碼
+        </div>
+
       </section>
     </div>
+
   </div>
 
+  <!-- ==================== 遊戲畫面 ==================== -->
   <div id="gameScreen" class="screen hidden">
+
     <div class="game-layout">
+
+      <!-- 左側 -->
       <aside class="side">
+
         <div class="card">
+
           <div class="stat-row">
             <span class="stat-label">模式</span>
             <span id="connMode" class="badge">單機</span>
           </div>
+
           <div class="stat-row">
             <span class="stat-label">你是</span>
             <span id="myRole">-</span>
           </div>
+
           <div class="stat-row">
             <span class="stat-label">狀態</span>
-            <span id="connStatus" class="badge ok">已連線</span>
+            <span id="connStatus" class="badge ok">
+              已連線
+            </span>
           </div>
+
         </div>
 
         <div class="card players">
+
           <div class="player black" id="blackCard">
             <div class="stone-dot black"></div>
+
             <div class="player-meta">
-              <div class="player-name">黑棋 <span id="blackStatus">已就緒</span></div>
-              <div class="player-cap">提子 <b id="blackCaptures">0</b></div>
+              <div class="player-name">
+                黑棋
+                <span id="blackStatus">已就緒</span>
+              </div>
+
+              <div class="player-cap">
+                提子
+                <b id="blackCaptures">0</b>
+              </div>
             </div>
           </div>
+
           <div class="player white" id="whiteCard">
             <div class="stone-dot white"></div>
+
             <div class="player-meta">
-              <div class="player-name">白棋 <span id="whiteStatus">已就緒</span></div>
-              <div class="player-cap">提子 <b id="whiteCaptures">0</b></div>
+              <div class="player-name">
+                白棋
+                <span id="whiteStatus">已就緒</span>
+              </div>
+
+              <div class="player-cap">
+                提子
+                <b id="whiteCaptures">0</b>
+              </div>
             </div>
           </div>
+
         </div>
 
         <div class="card turn" id="turnIndicator">
-          <div id="turnText">黑棋先行</div>
+          <div id="turnText">
+            黑棋先行
+          </div>
         </div>
+
       </aside>
 
+      <!-- 棋盤 -->
       <main class="board-wrap">
         <canvas id="boardCanvas"></canvas>
       </main>
 
+      <!-- 右側 -->
       <aside class="side">
+
         <div class="card actions">
-          <button id="passBtn" class="btn">虛手 Pass</button>
-          <button id="undoBtn" class="btn">悔棋</button>
-          <button id="newGameBtn" class="btn ghost">新對局</button>
-          <button id="leaveBtn" class="btn danger">返回大廳</button>
+
+          <button id="passBtn" class="btn">
+            虛手 Pass
+          </button>
+
+          <button id="undoBtn" class="btn">
+            悔棋
+          </button>
+
+          <button id="newGameBtn" class="btn ghost">
+            新對局
+          </button>
+
+          <button id="leaveBtn" class="btn danger">
+            返回大廳
+          </button>
+
         </div>
+
         <div class="card log-card">
           <div id="messageLog" class="log"></div>
         </div>
+
       </aside>
+
     </div>
   </div>
+
 </div>
 
+<!-- PeerJS -->
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<!-- 遊戲程式 -->
 <script src="app.js"></script>
+
 </body>
 </html>
