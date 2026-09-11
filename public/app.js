@@ -160,21 +160,21 @@ class GoGame {
     if (this.gameOver) {
       return {
         ok: false,
-        msg: '遊戲已結束'
+        code: 'over', msg: '遊戲已結束'
       };
     }
 
     if (!this.inBounds(x, y)) {
       return {
         ok: false,
-        msg: '超出邊界'
+        code: 'bounds', msg: '超出邊界'
       };
     }
 
     if (this.board[x][y] !== EMPTY) {
       return {
         ok: false,
-        msg: '此位置已有棋子'
+        code: 'occupied', msg: '此位置已有棋子'
       };
     }
 
@@ -185,7 +185,7 @@ class GoGame {
     ) {
       return {
         ok: false,
-        msg: '打劫禁止'
+        code: 'ko', msg: '打劫禁止'
       };
     }
 
@@ -235,7 +235,7 @@ class GoGame {
 
       return {
         ok: false,
-        msg: '禁止自殺'
+        code: 'suicide', msg: '禁止自殺'
       };
     }
 
@@ -263,7 +263,7 @@ class GoGame {
 
           return {
             ok: false,
-            msg: '打劫禁止重複局面'
+            code: 'superko', msg: '打劫禁止重複局面'
           };
         }
       }
@@ -343,7 +343,7 @@ class GoGame {
     if (this.gameOver) {
       return {
         ok: false,
-        msg: '遊戲已結束'
+        code: 'over', msg: '遊戲已結束'
       };
     }
 
@@ -415,7 +415,7 @@ class GoGame {
 
       return {
         ok: false,
-        msg: '無棋可悔'
+        code: 'noUndo', msg: '無棋可悔'
       };
     }
 
@@ -1065,7 +1065,9 @@ function addLog(
   const t =
     new Date()
       .toLocaleTimeString(
-        'zh-TW',
+        window.I18N
+          ? I18N.locale()
+          : 'zh-TW',
         {
           hour12: false
         }
@@ -2073,8 +2075,8 @@ $('newGameBtn')
     () => {
 
       showModal(
-        '確認新對局',
-        '確定要開始新對局嗎？',
+        t('dyn.confirmNewTitle'),
+        t('dyn.confirmNewBody'),
         ok => {
 
           if (ok)
@@ -2223,7 +2225,7 @@ $('copyRoomBtn')?.addEventListener(
       const btn = $('copyRoomBtn');
       if (btn) {
         const originalText = btn.innerText;
-        btn.innerText = '已複製！';
+        btn.innerText = t('dyn.copied');
 
         setTimeout(() => {
           btn.innerText = originalText;
@@ -2268,7 +2270,7 @@ $('submitRoomBtn')
 
         setP2PStatus(
           'join',
-          '請輸入有效的邀請碼',
+          t('dyn.invalidCode'),
           'error'
         );
       }
@@ -2362,17 +2364,17 @@ function startGame(
 
   $('connMode').textContent =
     m === 'hotseat'
-      ? '單機雙人'
-      : 'P2P 線上';
+      ? t('game.modeLocal')
+      : t('game.modeP2p');
 
 
   $('myRole').textContent =
     m === 'hotseat'
-      ? '雙人共用'
+      ? t('dyn.roleShared')
       : (
           color === BLACK
-            ? '黑棋'
-            : '白棋'
+            ? t('dyn.roleBlack')
+            : t('dyn.roleWhite')
         );
 
 
@@ -2384,7 +2386,7 @@ function startGame(
 
 
   addLog(
-    '對局開始！',
+    t('dyn.start'),
     'system'
   );
 
@@ -2498,6 +2500,13 @@ function applyMoveRemote(r) {
   drawBoard();
 
   saveGameToStorage();
+
+
+  window.GoSound?.play(
+    r.captured && r.captured.length
+      ? 'capture'
+      : 'stone'
+  );
 }
 
 
@@ -2578,7 +2587,9 @@ function doMove(
   if (!r.ok) {
 
     addLog(
-      r.msg,
+      r.code
+        ? t('err.' + r.code)
+        : r.msg,
       'error'
     );
 
@@ -2597,6 +2608,13 @@ function doMove(
   drawBoard();
 
   saveGameToStorage();
+
+
+  window.GoSound?.play(
+    r.captured && r.captured.length
+      ? 'capture'
+      : 'stone'
+  );
 }
 
 
@@ -2741,7 +2759,7 @@ function requestUndo() {
   ) {
 
     addLog(
-      '無棋可悔',
+      t('err.noUndo'),
       'error'
     );
 
@@ -2766,7 +2784,7 @@ function requestUndo() {
   if (pendingUndo) {
 
     addLog(
-      '已有等待中的悔棋請求',
+      t('dyn.undoPending'),
       'warn'
     );
 
@@ -2786,7 +2804,7 @@ function requestUndo() {
   ) {
 
     addLog(
-      '只能悔自己落下的最後一手棋',
+      t('dyn.undoOwnOnly'),
       'error'
     );
 
@@ -2804,7 +2822,7 @@ function requestUndo() {
   if (!sent) {
 
     addLog(
-      '目前無法連接對手',
+      t('dyn.undoNoConn'),
       'error'
     );
 
@@ -2816,7 +2834,7 @@ function requestUndo() {
 
 
   addLog(
-    '已送出悔棋請求，等待對方同意...',
+    t('dyn.undoSent'),
     'system'
   );
 
@@ -2838,8 +2856,8 @@ function onUndoRequest(
 
 
   showModal(
-    '悔棋請求',
-    '對手請求悔棋，是否同意？',
+    t('dyn.undoReqTitle'),
+    t('dyn.undoReqBody'),
     agree => {
 
       if (agree) {
@@ -2869,7 +2887,7 @@ function onUndoRequest(
 
 
         addLog(
-          '已同意對手悔棋，棋盤已更新，輪到對方落子',
+          t('dyn.undoAgreedLog'),
           'good'
         );
 
@@ -2915,7 +2933,7 @@ function onUndoAccept(msg) {
 
 
   addLog(
-    '對方已同意悔棋！目前輪到你落子',
+    t('dyn.undoAccepted'),
     'good'
   );
 }
@@ -2927,7 +2945,7 @@ function onUndoReject() {
 
 
   addLog(
-    '對方拒絕了你的悔棋請求',
+    t('dyn.undoRejected'),
     'error'
   );
 
@@ -2986,33 +3004,35 @@ function updateUI() {
         );
 
 
-      txt.innerHTML =
-        `對局結束！${
-          score.winner === BLACK
-            ? '黑'
-            : '白'
-        }勝 ${
-          score.diff.toFixed(1)
-        } 目`;
+      txt.textContent = t(
+        'dyn.gameOver',
+        {
+          w:
+            score.winner === BLACK
+              ? t('player.black')
+              : t('player.white'),
+          d:
+            score.diff.toFixed(1)
+        }
+      );
 
     } else {
 
       const name =
         game.currentPlayer === BLACK
-          ? '黑'
-          : '白';
+          ? t('player.black')
+          : t('player.white');
 
 
       txt.textContent =
         name +
-        '棋' +
         (
           mode !== 'hotseat'
             ? (
                 myColor ===
                 game.currentPlayer
-                  ? '（輪到你）'
-                  : '（等待對手）'
+                  ? t('dyn.turnYou')
+                  : t('dyn.turnWait')
               )
             : ''
         );
@@ -3146,13 +3166,13 @@ function scheduleReconnect() {
   ) {
 
     setConnStatus(
-      '連線失敗',
+      t('net.fail'),
       'error'
     );
 
 
     addLog(
-      '多次重新連線失敗，請確認雙方網路狀態。',
+      t('net.failLog'),
       'error'
     );
 
@@ -3209,7 +3229,9 @@ async function reconnectToRoom() {
 
 
   setConnStatus(
-    `正在重連 (${reconnectAttempts}/10)`,
+    t('net.reconnecting', {
+      n: reconnectAttempts
+    }),
     'pending'
   );
 
@@ -3222,7 +3244,7 @@ async function reconnectToRoom() {
     ) {
 
       setConnStatus(
-        '已連線',
+        t('net.connected'),
         'ok'
       );
 
@@ -3313,7 +3335,7 @@ async function reconnectToRoom() {
      * 等待对手重新连接。
      */
     setConnStatus(
-      '等待對手重新連線...',
+      t('net.waitOpponent'),
       'pending'
     );
 
@@ -3353,6 +3375,22 @@ function installConnHandlers(
 
   conn.__goHandlersInstalled =
     true;
+
+
+  /*
+   * 連線建立當下立即通知聊天模組掛上監聽，
+   * 避免輪詢間隙漏接最早的訊息。
+   */
+  try {
+    if (
+      window.GoChat &&
+      window.GoChat.hookConn
+    ) {
+      window.GoChat.hookConn(
+        conn
+      );
+    }
+  } catch (e) {}
 
 
   /* -------------------------------------------------------
@@ -3437,13 +3475,13 @@ function installConnHandlers(
 
 
         setConnStatus(
-          '對手已離開',
+          t('net.oppLeft'),
           'error'
         );
 
 
         addLog(
-          '對手已主動離開房間',
+          t('net.oppLeftLog'),
           'error'
         );
 
@@ -3603,13 +3641,13 @@ function installConnHandlers(
 
 
         setConnStatus(
-          '已連線',
+          t('net.connected'),
           'ok'
         );
 
 
         addLog(
-          '棋盤狀態已同步',
+          t('net.synced'),
           'good'
         );
 
@@ -3651,7 +3689,7 @@ function installConnHandlers(
 
 
       setConnStatus(
-        '已連線',
+        t('net.connected'),
         'ok'
       );
 
@@ -3716,13 +3754,13 @@ function installConnHandlers(
 
 
       setConnStatus(
-        '連線中斷，正在重連...',
+        t('net.disconnected'),
         'pending'
       );
 
 
       addLog(
-        '網路連線暫時中斷，正在嘗試重新連線...',
+        t('net.interrupted'),
         'warn'
       );
 
@@ -3876,7 +3914,7 @@ async function peerHostRoom(
 
     setP2PStatus(
       'host',
-      'PeerJS 載入失敗',
+      t('net.peerFail'),
       'error'
     );
 
@@ -3930,9 +3968,9 @@ async function peerHostRoom(
 
       setP2PStatus(
         'host',
-        '房間已建立！邀請碼：' +
-          code +
-          '，請等待對手加入...',
+        t('net.roomCreated', {
+          c: code
+        }),
         'ok'
       );
     }
@@ -3986,7 +4024,7 @@ async function peerHostRoom(
 
 
           setConnStatus(
-            '對手已連線',
+            t('net.oppConnected'),
             'ok'
           );
 
@@ -4005,7 +4043,7 @@ async function peerHostRoom(
 
 
           addLog(
-            '對手已成功加入，開始對局！',
+            t('net.oppJoined'),
             'good'
           );
 
@@ -4047,13 +4085,13 @@ async function peerHostRoom(
 
 
       setConnStatus(
-        'P2P 暫時斷線，正在恢復...',
+        t('net.recovering'),
         'pending'
       );
 
 
       addLog(
-        'P2P 服務暫時中斷，正在重新連線...',
+        t('net.rebuilding'),
         'warn'
       );
 
@@ -4113,7 +4151,7 @@ async function peerHostRoom(
       ) {
 
         setConnStatus(
-          '網路異常',
+          t('net.netErr'),
           'pending'
         );
       }
@@ -4171,9 +4209,9 @@ async function peerJoinRoom(
 
   setP2PStatus(
     'join',
-    '正在加入房間 ' +
-      code +
-      ' ...',
+    t('net.joining', {
+      c: code
+    }),
     'pending'
   );
 
@@ -4195,7 +4233,7 @@ async function peerJoinRoom(
 
     setP2PStatus(
       'join',
-      'PeerJS 載入失敗',
+      t('net.peerFail'),
       'error'
     );
 
@@ -4243,13 +4281,13 @@ async function peerJoinRoom(
 
 
       setConnStatus(
-        'P2P 暫時斷線，正在恢復...',
+        t('net.recovering'),
         'pending'
       );
 
 
       addLog(
-        'P2P 服務暫時中斷，正在重新連線...',
+        t('net.rebuilding'),
         'warn'
       );
 
@@ -4371,15 +4409,15 @@ function connectToHost() {
 
 
       $('connMode').textContent =
-        'P2P 線上';
+        t('game.modeP2p');
 
 
       $('myRole').textContent =
-        '白棋';
+        t('dyn.roleWhite');
 
 
       setConnStatus(
-        '已加入房間',
+        t('net.joined'),
         'ok'
       );
 
@@ -4388,7 +4426,7 @@ function connectToHost() {
 
 
       addLog(
-        '已順利連入房間！等待同步棋盤...',
+        t('net.joinedSync'),
         'good'
       );
 
@@ -4630,3 +4668,59 @@ document.addEventListener(
 ========================================================= */
 
 updateBoardSizeUI();
+
+
+/* =========================================================
+   i18n: 初始狀態文字（之後由各狀態函式動態覆寫）
+========================================================= */
+
+$('connMode').textContent =
+  t('game.modeLocal');
+
+$('connStatus').textContent =
+  t('net.connected');
+
+$('p2pHostStatus').textContent =
+  t('host.connecting');
+
+$('p2pJoinStatus').textContent =
+  t('join.waiting');
+
+
+/* =========================================================
+   i18n: 語言切換時刷新對局中的動態文字
+========================================================= */
+
+window.addEventListener(
+  'go:langchange',
+  () => {
+
+    if (
+      !gameScreen ||
+      gameScreen.classList.contains(
+        'hidden'
+      )
+    ) {
+      return;
+    }
+
+
+    $('connMode').textContent =
+      mode === 'hotseat'
+        ? t('game.modeLocal')
+        : t('game.modeP2p');
+
+
+    $('myRole').textContent =
+      mode === 'hotseat'
+        ? t('dyn.roleShared')
+        : (
+            myColor === BLACK
+              ? t('dyn.roleBlack')
+              : t('dyn.roleWhite')
+          );
+
+
+    updateUI();
+  }
+);

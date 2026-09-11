@@ -3,28 +3,195 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f6f8">
 <title>線上圍棋</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='12' cy='12' r='9' fill='%2317191c'/%3E%3Ccircle cx='20' cy='20' r='9' fill='white' stroke='%2317191c' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
+<!-- ==================== 確認對話框 ==================== -->
 <div id="modalOverlay" class="modal-overlay hidden">
   <div class="modal">
-    <div class="modal-title" id="modalTitle">確認</div>
-    <div class="modal-body" id="modalBody">是否執行此操作？</div>
+    <div class="modal-title" id="modalTitle" data-i18n="modal.confirmTitle">確認</div>
+    <div class="modal-body" id="modalBody" data-i18n="modal.confirmBody">是否執行此操作？</div>
 
     <div class="modal-actions">
-      <button id="modalCancel" class="btn ghost modal-btn">取消</button>
-      <button id="modalOk" class="btn primary modal-btn">確定</button>
+      <button id="modalCancel" class="btn ghost modal-btn" data-i18n="modal.cancel">取消</button>
+      <button id="modalOk" class="btn primary modal-btn" data-i18n="modal.ok">確定</button>
     </div>
   </div>
+</div>
+
+<!-- ==================== 設置面板 ==================== -->
+<div id="settingsOverlay" class="modal-overlay hidden">
+  <div class="modal settings-modal">
+
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="settings.title">設置</div>
+      <button type="button" id="settingsClose" class="icon-btn" aria-label="關閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label" data-i18n="settings.theme">主題</div>
+      <div class="segmented" id="themeSeg">
+        <button type="button" data-value="light" data-i18n="settings.light">淺色</button>
+        <button type="button" data-value="dark" data-i18n="settings.dark">深色</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label" data-i18n="settings.lang">語言</div>
+      <div class="segmented" id="langSeg">
+        <button type="button" data-value="zh-TW">繁體中文</button>
+        <button type="button" data-value="en">English</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label" data-i18n="settings.sound">音效</div>
+      <label class="switch">
+        <input type="checkbox" id="sndOn" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="sound-detail" id="soundDetail">
+      <div class="setting-row">
+        <div class="setting-label" data-i18n="settings.volume">音量</div>
+        <input type="range" id="sndVol" class="vol-slider" min="0" max="100" step="5" value="70">
+      </div>
+
+      <label class="check-row">
+        <input type="checkbox" id="sndStone" checked>
+        <span data-i18n="sound.stone">落子音</span>
+      </label>
+
+      <label class="check-row">
+        <input type="checkbox" id="sndCapture" checked>
+        <span data-i18n="sound.capture">提子音</span>
+      </label>
+
+      <label class="check-row">
+        <input type="checkbox" id="sndMsg" checked>
+        <span data-i18n="sound.msg">訊息音</span>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== 唱片機 ==================== -->
+<div id="jukeboxPanel" class="jukebox">
+
+  <div class="jb-head">
+    <div class="jb-title" data-i18n="jb.title">唱片機</div>
+    <button type="button" id="jukeboxClose" class="icon-btn small" aria-label="關閉">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="jb-record" id="jbRecord" aria-hidden="true">
+    <div class="jb-disc">
+      <div class="jb-label">
+        <span class="jb-dot b"></span>
+        <span class="jb-dot w"></span>
+      </div>
+    </div>
+    <div class="jb-tonearm"></div>
+  </div>
+
+  <div class="jb-info">
+    <div id="jbName" class="jb-name">—</div>
+    <div id="jbCount" class="jb-count"></div>
+  </div>
+
+  <div class="jb-controls">
+    <button type="button" id="jbPrev" class="icon-btn" data-i18n-title="jb.prev" aria-label="上一首">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M6 6h2.2v12H6z"/>
+        <path d="M18 6.5v11L8.8 12z"/>
+      </svg>
+    </button>
+    <button type="button" id="jbPlay" class="icon-btn jb-play" aria-label="播放/暫停">
+      <svg id="jbPlayIcon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M8 5.3v13.4L19 12z"/>
+      </svg>
+      <svg id="jbPauseIcon" class="hidden" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.6z"/>
+      </svg>
+    </button>
+    <button type="button" id="jbNext" class="icon-btn" data-i18n-title="jb.next" aria-label="下一首">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M15.8 6H18v12h-2.2z"/>
+        <path d="M6 6.5v11L15.2 12z"/>
+      </svg>
+    </button>
+    <button type="button" id="jbRepeat" class="icon-btn" aria-label="循環模式">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M17 2.5l3 3-3 3"/>
+        <path d="M20 5.5H7a4 4 0 0 0-4 4v1"/>
+        <path d="M7 21.5l-3-3 3-3"/>
+        <path d="M4 18.5h13a4 4 0 0 0 4-4v-1"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="jb-vol-row">
+    <span class="jb-vol-label" data-i18n="jb.volume">音量</span>
+    <input type="range" id="jbVol" class="vol-slider" min="0" max="100" step="5" value="80">
+  </div>
+
+  <div id="jbEmpty" class="jb-empty" data-i18n="jb.empty">選擇裝置裡的 MP4 開始播放
+支援一次加入多個檔案</div>
+  <div id="jbList" class="jb-list hidden"></div>
+
+  <div class="jb-actions">
+    <button type="button" id="jbPickFilesBtn" class="btn small" data-i18n="jb.pickFiles">選擇檔案</button>
+    <button type="button" id="jbPickFolderBtn" class="btn small ghost" data-i18n="jb.pickFolder">選擇資料夾</button>
+    <button type="button" id="jbClear" class="btn small ghost" data-i18n="jb.clear">清空</button>
+  </div>
+
+  <input type="file" id="jbFiles" class="hidden" multiple accept=".mp4,video/mp4">
+  <input type="file" id="jbFolder" class="hidden" webkitdirectory>
+
 </div>
 
 <div id="app">
 
   <header class="app-header">
-    <h1>🎯 線上圍棋</h1>
+    <button type="button" id="jukeboxBtn" class="icon-btn header-btn jb" data-i18n-title="jb.title" aria-label="唱片機">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.5"/>
+        <circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button type="button" id="settingsBtn" class="icon-btn header-btn" data-i18n-title="settings.title" aria-label="設置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 8h9M19.5 8H20M4 16h3M11.5 16H20"/>
+        <circle cx="16" cy="8" r="2.4"/>
+        <circle cx="9" cy="16" r="2.4"/>
+      </svg>
+    </button>
+
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="12.5" cy="12" r="8.5" fill="#17191c"/>
+        <circle cx="20" cy="20" r="8.5" fill="#ffffff" stroke="#17191c" stroke-width="1.6"/>
+      </svg>
+      <h1 data-i18n="app.title">線上圍棋</h1>
+    </div>
+    <div class="tagline" data-i18n="app.tagline">對弈 · 連線 · 手談</div>
   </header>
 
   <!-- ==================== 大廳 ==================== -->
@@ -33,26 +200,41 @@
     <div id="lobbyHome">
 
       <section class="card">
-        <h2>對戰模式</h2>
+        <h2 data-i18n="mode.title">對戰模式</h2>
 
         <div class="mode-grid">
 
           <button class="mode-btn" data-action="hotseat">
-            <div class="mode-emoji">👥</div>
-            <div class="mode-title">單機雙人</div>
-            <div class="mode-desc">同一畫面兩人輪流</div>
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="9.2" cy="9.2" r="5.4" fill="currentColor"/>
+                <circle cx="14.8" cy="14.8" r="5.4" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              </svg>
+            </div>
+            <div class="mode-title" data-i18n="mode.local">單機雙人</div>
+            <div class="mode-desc" data-i18n="mode.localDesc">同一畫面兩人輪流</div>
           </button>
 
           <button class="mode-btn" data-action="p2p-host">
-            <div class="mode-emoji">🌐</div>
-            <div class="mode-title">建立房間</div>
-            <div class="mode-desc">產生邀請碼</div>
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="16" rx="3.5"/>
+                <path d="M12 9v6M9 12h6"/>
+              </svg>
+            </div>
+            <div class="mode-title" data-i18n="mode.host">建立房間</div>
+            <div class="mode-desc" data-i18n="mode.hostDesc">產生邀請碼</div>
           </button>
 
           <button class="mode-btn" data-action="goto-join">
-            <div class="mode-emoji">🎟️</div>
-            <div class="mode-title">加入房間</div>
-            <div class="mode-desc">輸入邀請碼</div>
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/>
+                <path d="M4 12h10M10 8l4 4-4 4"/>
+              </svg>
+            </div>
+            <div class="mode-title" data-i18n="mode.join">加入房間</div>
+            <div class="mode-desc" data-i18n="mode.joinDesc">輸入邀請碼</div>
           </button>
 
         </div>
@@ -60,26 +242,26 @@
 
       <!-- 棋盤大小 -->
       <section class="card">
-        <h2>棋盤大小</h2>
+        <h2 data-i18n="size.title">棋盤大小</h2>
 
         <div class="size-row">
 
           <label class="checked">
             <input type="radio" name="boardSize" value="9">
             <span>9 × 9</span>
-            <small>入門</small>
+            <small data-i18n="size.beginner">入門</small>
           </label>
 
           <label>
             <input type="radio" name="boardSize" value="13">
             <span>13 × 13</span>
-            <small>中級</small>
+            <small data-i18n="size.intermediate">中級</small>
           </label>
 
           <label>
             <input type="radio" name="boardSize" value="19" checked>
             <span>19 × 19</span>
-            <small>標準</small>
+            <small data-i18n="size.standard">標準</small>
           </label>
 
         </div>
@@ -87,16 +269,16 @@
 
       <!-- 恢復對局 -->
       <section id="resumeCard" class="card hidden">
-        <h2>恢復對局</h2>
+        <h2 data-i18n="resume.title">恢復對局</h2>
 
         <div id="resumeInfo" class="resume-info"></div>
 
         <div class="resume-actions">
-          <button id="resumeBtn" class="btn primary">
+          <button id="resumeBtn" class="btn primary" data-i18n="resume.continue">
             繼續上一局
           </button>
 
-          <button id="clearResumeBtn" class="btn ghost">
+          <button id="clearResumeBtn" class="btn ghost" data-i18n="resume.clear">
             清除記錄
           </button>
         </div>
@@ -109,16 +291,16 @@
 
       <div class="sub-nav">
         <button id="backFromHost" class="btn ghost small">
-          ← 返回
+          ← <span data-i18n="act.leave">返回大廳</span>
         </button>
       </div>
 
       <section class="card">
-        <h2>等待對手加入</h2>
+        <h2 data-i18n="host.title">等待對手加入</h2>
 
         <div class="code-display">
 
-          <div class="code-label">
+          <div class="code-label" data-i18n="host.codeLabel">
             邀請碼
           </div>
 
@@ -130,11 +312,11 @@
           >
 
           <div class="row">
-            <button id="copyRoomBtn" class="btn">
+            <button id="copyRoomBtn" class="btn" data-i18n="host.copy">
               複製
             </button>
 
-            <button id="shareRoomBtn" class="btn ghost">
+            <button id="shareRoomBtn" class="btn ghost" data-i18n="host.share">
               分享連結
             </button>
           </div>
@@ -153,17 +335,17 @@
 
       <div class="sub-nav">
         <button id="backFromJoin" class="btn ghost small">
-          ← 返回
+          ← <span data-i18n="act.leave">返回大廳</span>
         </button>
       </div>
 
       <section class="card">
 
-        <h2>加入房間</h2>
+        <h2 data-i18n="join.title">加入房間</h2>
 
         <div class="code-display">
 
-          <div class="code-label">
+          <div class="code-label" data-i18n="join.codeLabel">
             輸入邀請碼
           </div>
 
@@ -171,11 +353,12 @@
             type="text"
             id="p2pRoomInput"
             placeholder="例如：G7XK2M"
+            data-i18n-placeholder="join.placeholder"
             maxlength=""
             class="room-code-input"
           >
 
-          <button id="submitRoomBtn" class="btn primary big">
+          <button id="submitRoomBtn" class="btn primary big" data-i18n="join.submit">
             加入
           </button>
 
@@ -201,17 +384,17 @@
         <div class="card">
 
           <div class="stat-row">
-            <span class="stat-label">模式</span>
+            <span class="stat-label" data-i18n="game.mode">模式</span>
             <span id="connMode" class="badge">單機</span>
           </div>
 
           <div class="stat-row">
-            <span class="stat-label">你是</span>
+            <span class="stat-label" data-i18n="game.you">你是</span>
             <span id="myRole">-</span>
           </div>
 
           <div class="stat-row">
-            <span class="stat-label">狀態</span>
+            <span class="stat-label" data-i18n="game.status">狀態</span>
             <span id="connStatus" class="badge ok">
               已連線
             </span>
@@ -226,12 +409,12 @@
 
             <div class="player-meta">
               <div class="player-name">
-                黑棋
-                <span id="blackStatus">已就緒</span>
+                <span data-i18n="player.black">黑棋</span>
+                <span id="blackStatus" data-i18n="player.ready">已就緒</span>
               </div>
 
               <div class="player-cap">
-                提子
+                <span data-i18n="player.captures">提子</span>
                 <b id="blackCaptures">0</b>
               </div>
             </div>
@@ -242,12 +425,12 @@
 
             <div class="player-meta">
               <div class="player-name">
-                白棋
-                <span id="whiteStatus">已就緒</span>
+                <span data-i18n="player.white">白棋</span>
+                <span id="whiteStatus" data-i18n="player.ready">已就緒</span>
               </div>
 
               <div class="player-cap">
-                提子
+                <span data-i18n="player.captures">提子</span>
                 <b id="whiteCaptures">0</b>
               </div>
             </div>
@@ -256,7 +439,7 @@
         </div>
 
         <div class="card turn" id="turnIndicator">
-          <div id="turnText">
+          <div id="turnText" data-i18n="turn.blackFirst">
             黑棋先行
           </div>
         </div>
@@ -273,19 +456,19 @@
 
         <div class="card actions">
 
-          <button id="passBtn" class="btn">
+          <button id="passBtn" class="btn" data-i18n="act.pass">
             虛手 Pass
           </button>
 
-          <button id="undoBtn" class="btn">
+          <button id="undoBtn" class="btn" data-i18n="act.undo">
             悔棋
           </button>
 
-          <button id="newGameBtn" class="btn ghost">
+          <button id="newGameBtn" class="btn ghost" data-i18n="act.newGame">
             新對局
           </button>
 
-          <button id="leaveBtn" class="btn danger">
+          <button id="leaveBtn" class="btn danger" data-i18n="act.leave">
             返回大廳
           </button>
 
@@ -293,6 +476,42 @@
 
         <div class="card log-card">
           <div id="messageLog" class="log"></div>
+        </div>
+
+        <!-- 對局聊天（新增，不影響原有功能） -->
+        <div class="card chat-card" id="chatCard">
+          <div class="chat-head" id="chatHead">
+            <span class="chat-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span data-i18n="chat.title">對局聊天</span>
+            </span>
+            <span class="chat-unread hidden" id="chatUnread">0</span>
+            <button type="button" class="chat-toggle" id="chatToggle" aria-label="收合/展開聊天">▾</button>
+          </div>
+
+          <div class="chat-body" id="chatBody">
+            <div id="chatMsgs" class="chat-msgs"></div>
+
+            <div id="chatQuick" class="chat-quick"></div>
+
+            <div class="chat-input-row">
+              <button type="button" id="chatEmojiBtn" class="chat-emoji-btn" title="表情" data-i18n-title="chat.emoji">😀</button>
+              <input
+                type="text"
+                id="chatInput"
+                class="chat-input"
+                maxlength="200"
+                placeholder="輸入訊息…"
+                data-i18n-placeholder="chat.placeholder"
+                autocomplete="off"
+              >
+              <button type="button" id="chatSendBtn" class="btn primary chat-send" data-i18n="chat.send">傳送</button>
+            </div>
+
+            <div id="chatEmojiGrid" class="chat-emoji-grid hidden"></div>
+          </div>
         </div>
 
       </aside>
@@ -305,8 +524,19 @@
 <!-- PeerJS -->
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
+<!-- 多語系 / 音效 / 設置(需在 app.js 之前載入) -->
+<script src="i18n.js"></script>
+<script src="sound.js"></script>
+<script src="settings.js"></script>
+
 <!-- 遊戲程式 -->
 <script src="app.js"></script>
+
+<!-- 對局聊天（新增模組，掛接 app.js 全域連線） -->
+<script src="chat.js"></script>
+
+<!-- 唱片機（MP4 循環播放） -->
+<script src="jukebox.js"></script>
 
 </body>
 </html>
