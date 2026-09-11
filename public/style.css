@@ -424,7 +424,7 @@ body{
 .vol-slider{width:140px;accent-color:var(--primary);cursor:pointer}
 
 /* 衣櫥 */
-.header-btn.wb{right:92px}
+.header-btn.wb{right:46px}
 .wardrobe-modal{max-width:560px}
 .wardrobe-tabs{margin-bottom:14px}
 .skin-preview-card canvas{height:96px}
@@ -576,7 +576,7 @@ body{
 /* ============================================================
    唱片機
 ============================================================ */
-.header-btn.jb{right:46px}
+.header-btn.jb{right:92px}
 
 #jukeboxBtn.playing{color:var(--info);border-color:var(--info-border)}
 
