@@ -1,4 +1,11 @@
 const EMPTY = 0, BLACK = 1, WHITE = 2;
+
+/* 版本標記:打開瀏覽器控制台可確認目前載入的代碼版本 */
+console.info(
+  '%c線上圍棋 UI v2026-09-12-r3(虛手計數由棋譜推導)',
+  'font-weight:bold;color:#2e6fe0'
+);
+
 const SAVE_KEY = 'go-p2p-save-v5';
 
 const STARS = {
@@ -50,6 +57,7 @@ class GoGame {
     this.lastMove = null;
     this.passCount = 0;
     this.gameOver = false;
+    this.dead = new Set();
   }
 
 
@@ -152,6 +160,36 @@ class GoGame {
     return this.board
       .map(row => row.join(''))
       .join('|');
+  }
+
+
+  consecutivePasses() {
+
+    /*
+     * 連續虛手數永遠由歷史推導:
+     * 結尾有幾筆虛手就是幾。
+     * 計數器不再自行累加,
+     * 任何來源的污染都會在此自癒。
+     */
+    let n = 0;
+
+    for (
+      let i = this.history.length - 1;
+      i >= 0;
+      i--
+    ) {
+
+      const h =
+        this.history[i];
+
+      if (h.move && h.move.pass) {
+        n++;
+      } else {
+        break;
+      }
+    }
+
+    return n;
   }
 
 
@@ -272,6 +310,19 @@ class GoGame {
 
     this.captures[player] += captured.length;
 
+    /*
+     * 記錄「落子前」的劫點與虛手數:
+     * undo 還原時必須回到前一手當下的狀態,
+     * 否則劫爭限制會遺失、虛手計數會歸零錯誤。
+     */
+    const previousKo =
+      this.koPoint
+        ? { ...this.koPoint }
+        : null;
+
+    const previousPassCount =
+      this.passCount;
+
     this.koPoint =
       captured.length === 1
         ? {
@@ -299,10 +350,9 @@ class GoGame {
 
       captured: captured.map(v => [...v]),
 
-      koPoint:
-        this.koPoint
-          ? { ...this.koPoint }
-          : null
+      koPoint: previousKo,
+
+      passCount: previousPassCount
     });
 
 
@@ -352,9 +402,6 @@ class GoGame {
       this.currentPlayer;
 
 
-    this.passCount++;
-
-
     this.history.push({
 
       hash: this.hash(),
@@ -366,7 +413,14 @@ class GoGame {
 
       captured: [],
 
-      koPoint: null
+      /*
+       * push 當下 this.koPoint 還是虛手前的值:
+       * 記下來,undo 還原後劫爭限制才不會消失
+       */
+      koPoint:
+        this.koPoint
+          ? { ...this.koPoint }
+          : null
     });
 
 
@@ -378,6 +432,10 @@ class GoGame {
       this.currentPlayer === BLACK
         ? WHITE
         : BLACK;
+
+
+    this.passCount =
+      this.consecutivePasses();
 
 
     if (this.passCount >= 2) {
@@ -491,15 +549,16 @@ class GoGame {
         previousMove;
 
 
-      this.passCount = 0;
+      this.passCount =
+        this.consecutivePasses();
 
     } else {
 
       this.currentPlayer =
         last.move.p;
 
-      if (this.passCount > 0)
-        this.passCount--;
+      this.passCount =
+        this.consecutivePasses();
 
       this.lastMove = null;
     }
@@ -555,6 +614,41 @@ class GoGame {
     this.lastMove = null;
     this.passCount = 0;
     this.gameOver = false;
+    this.dead = new Set();
+  }
+
+
+  toggleDead(x, y) {
+
+    /*
+     * 終局點目:整組棋子共同死活。
+     * 僅在雙虛手終局後可用。
+     */
+    if (!this.gameOver)
+      return false;
+
+    if (this.board[x][y] === EMPTY)
+      return false;
+
+    const grp =
+      this.group(x, y);
+
+    const isDead =
+      this.dead.has(`${x},${y}`);
+
+    for (const [sx, sy] of grp.stones) {
+
+      const key =
+        `${sx},${sy}`;
+
+      if (isDead) {
+        this.dead.delete(key);
+      } else {
+        this.dead.add(key);
+      }
+    }
+
+    return true;
   }
 
 
@@ -563,6 +657,21 @@ class GoGame {
   ) {
 
     const size = this.size;
+
+
+    /*
+     * 終局點目:被標記的死子視同已提清——
+     * 不計子,其空點由領地泛洪自動歸給對方
+     */
+    const eff =
+      this.board.map((row, x) =>
+        row.map((c, y) =>
+          c !== EMPTY &&
+          this.dead.has(`${x},${y}`)
+            ? EMPTY
+            : c
+        )
+      );
 
 
     const visited =
@@ -585,10 +694,10 @@ class GoGame {
 
       for (let y = 0; y < size; y++) {
 
-        if (this.board[x][y] === BLACK)
+        if (eff[x][y] === BLACK)
           blackStones++;
 
-        else if (this.board[x][y] === WHITE)
+        else if (eff[x][y] === WHITE)
           whiteStones++;
       }
     }
@@ -634,7 +743,7 @@ class GoGame {
           ] of this.neighbors(cx, cy)) {
 
             const c =
-              this.board[nx][ny];
+              eff[nx][ny];
 
 
             if (c === BLACK) {
@@ -781,7 +890,10 @@ class GoGame {
         this.passCount,
 
       gameOver:
-        this.gameOver
+        this.gameOver,
+
+      dead:
+        [...this.dead]
     };
   }
 
@@ -842,12 +954,20 @@ class GoGame {
         : null;
 
 
+    /*
+     * 連續虛手由歷史推導:
+     * 同步過來的污染或過期計數在此自癒
+     */
     this.passCount =
-      s.passCount || 0;
+      this.consecutivePasses();
 
 
     this.gameOver =
       !!s.gameOver;
+
+
+    this.dead =
+      new Set(s.dead || []);
   }
 }
 
@@ -865,7 +985,7 @@ const gameScreen =
 const boardCanvas =
   document.getElementById('boardCanvas');
 
-const ctx =
+let ctx =
   boardCanvas
     ? boardCanvas.getContext('2d')
     : null;
@@ -914,6 +1034,11 @@ let reconnectAttempts = 0;
 let manuallyLeaving = false;
 
 let opponentLeft = false;
+
+/* 觀戰:所有觀戰者連線 + 本次加入身份('play' | 'spectate') */
+let spectatorConns = new Set();
+
+let joinRole = 'play';
 
 
 /* =========================================================
@@ -1089,6 +1214,10 @@ function addLog(
    Connection UI
 ========================================================= */
 
+/* 目前連線狀態(記下可反查的詞條,語言切換時重繪) */
+let connStatusRef = null;
+let p2pStatusRef = null;
+
 function setConnStatus(
   text,
   cls = 'ok'
@@ -1099,6 +1228,17 @@ function setConnStatus(
 
   if (!s)
     return;
+
+
+  connStatusRef = {
+    key:
+      window.I18N
+        ? I18N.keyOf(text)
+        : null,
+    which: null,
+    text,
+    cls
+  };
 
 
   s.textContent =
@@ -1125,6 +1265,17 @@ function setP2PStatus(
     );
 
 
+  p2pStatusRef = {
+    key:
+      window.I18N
+        ? I18N.keyOf(text)
+        : null,
+    which,
+    text,
+    cls
+  };
+
+
   if (!el)
     return;
 
@@ -1146,6 +1297,11 @@ function setP2PStatus(
 function canPlay() {
 
   if (!game)
+    return false;
+
+
+  /* 觀戰者永遠不能落子 */
+  if (mode === 'spectate')
     return false;
 
 
@@ -1470,6 +1626,38 @@ function drawBoard() {
           y,
           game.board[x][y]
         );
+
+        /*
+         * 終局點目:死子加紅點標記
+         */
+        if (
+          game.dead &&
+          game.dead.has(`${x},${y}`)
+        ) {
+
+          const dcx =
+            margin +
+            x * cellSize;
+
+          const dcy =
+            margin +
+            y * cellSize;
+
+          ctx.fillStyle =
+            'rgba(231,76,60,0.6)';
+
+          ctx.beginPath();
+
+          ctx.arc(
+            dcx,
+            dcy,
+            cellSize * 0.16,
+            0,
+            Math.PI * 2
+          );
+
+          ctx.fill();
+        }
       }
     }
   }
@@ -1620,11 +1808,46 @@ function drawBoard() {
    Draw Stone
 ========================================================= */
 
+/* =========================================================
+   皮膚渲染器註冊表:新增皮膚只需
+   寫一個 draw 函數並在此註冊
+========================================================= */
+
+const SKIN_RENDERERS = {
+  pig: drawPigStone,
+  shiba: drawShibaStone,
+  cat: drawCatStone,
+  panda: drawPandaStone,
+  galaxy: drawGalaxyStone,
+  math: drawMathStone
+};
+
+
 function drawStone(
   x,
   y,
-  c
+  c,
+  forceSkin
 ) {
+
+  /*
+   * 皮膚系統:每套皮膚以成對配色區分黑白。
+   * forceSkin:預覽用,強制指定皮膚
+   */
+  const skin =
+    forceSkin ||
+    window.GoSettings?.get?.().skin ||
+    'classic';
+
+  const renderer =
+    SKIN_RENDERERS[skin];
+
+  if (renderer) {
+
+    renderer(x, y, c);
+
+    return;
+  }
 
   const cx =
     margin +
@@ -1721,6 +1944,1042 @@ function drawStone(
 
   ctx.restore();
 }
+
+
+/* =========================================================
+   Draw Pig Stone(小豬皮膚:成對絨毛豬)
+   白方 = 粉紅絨毛豬 / 黑方 = 巧克力絨毛豬
+========================================================= */
+
+function drawPigStone(
+  x,
+  y,
+  c
+) {
+
+  const cx =
+    margin +
+    x * cellSize;
+
+  const cy =
+    margin +
+    y * cellSize;
+
+  const r =
+    cellSize * 0.46;
+
+  const white =
+    c === WHITE;
+
+  /* 成對配色:同一隻豬、兩種毛色 */
+  const furLight = white ? '#ffdce4' : '#cf9f74';
+  const furMid   = white ? '#ffb3c6' : '#b07c53';
+  const furDeep  = white ? '#f0809f' : '#7e5335';
+  const earIn    = white ? '#ff8fae' : '#9c6b47';
+  const snout    = white ? '#ffd6df' : '#c99c74';
+  const ink      = white ? '#5c3344' : '#382416';
+
+  ctx.save();
+
+  /* 柔軟絨毛投影 */
+  ctx.shadowColor =
+    white
+      ? 'rgba(150,40,70,0.30)'
+      : 'rgba(40,20,10,0.35)';
+
+  ctx.shadowBlur =
+    cellSize * 0.13;
+
+  ctx.shadowOffsetY =
+    cellSize * 0.05;
+
+  /* 身體:三段漸層的絨毛球 */
+  const body =
+    ctx.createRadialGradient(
+      cx - r * 0.32,
+      cy - r * 0.38,
+      r * 0.12,
+      cx,
+      cy,
+      r
+    );
+
+  body.addColorStop(0, furLight);
+  body.addColorStop(0.55, furMid);
+  body.addColorStop(1, furDeep);
+
+  ctx.fillStyle =
+    body;
+
+  ctx.beginPath();
+
+  ctx.arc(
+    cx,
+    cy,
+    r * 0.97,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.shadowColor =
+    'transparent';
+
+  /* 絨毛邊:細毛讓球看起來毛絨絨(小棋盤自動省略) */
+  if (cellSize >= 24) {
+
+    ctx.strokeStyle =
+      furLight;
+
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth =
+      Math.max(1, r * 0.05);
+
+    const ticks = 16;
+
+    for (let i = 0; i < ticks; i++) {
+
+      const a =
+        (i / ticks) * Math.PI * 2 + 0.18;
+
+      ctx.beginPath();
+
+      ctx.moveTo(
+        cx + Math.cos(a) * r * 0.95,
+        cy + Math.sin(a) * r * 0.95
+      );
+
+      ctx.lineTo(
+        cx + Math.cos(a) * r * 1.05,
+        cy + Math.sin(a) * r * 1.05
+      );
+
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+
+  /* 耳朵:圓潤三角 + 內耳(成對出現在頭頂兩側) */
+  const ear =
+    (bx, by, side, scale, fill) => {
+
+      ctx.fillStyle =
+        fill;
+
+      ctx.beginPath();
+
+      ctx.moveTo(
+        bx - side * r * 0.16 * scale,
+        by + r * 0.10 * scale
+      );
+
+      ctx.quadraticCurveTo(
+        bx + side * r * 0.10 * scale,
+        by - r * 0.30 * scale,
+        bx + side * r * 0.27 * scale,
+        by - r * 0.05 * scale
+      );
+
+      ctx.quadraticCurveTo(
+        bx + side * r * 0.21 * scale,
+        by + r * 0.17 * scale,
+        bx - side * r * 0.16 * scale,
+        by + r * 0.10 * scale
+      );
+
+      ctx.closePath();
+
+      ctx.fill();
+    };
+
+  for (const side of [-1, 1]) {
+
+    const bx =
+      cx + side * r * 0.46;
+
+    const by =
+      cy - r * 0.40;
+
+    ear(bx, by, side, 1, furMid);
+
+    ear(
+      bx + side * r * 0.03,
+      by + r * 0.03,
+      side,
+      0.55,
+      earIn
+    );
+  }
+
+
+  /* 腮紅 */
+  ctx.fillStyle =
+    white
+      ? 'rgba(255,110,145,0.40)'
+      : 'rgba(205,95,60,0.35)';
+
+  for (const side of [-1, 1]) {
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx + side * r * 0.44,
+      cy + r * 0.12,
+      r * 0.13,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+  }
+
+
+  /* 眼睛:圓點 + 高光 */
+  for (const side of [-1, 1]) {
+
+    ctx.fillStyle =
+      ink;
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx + side * r * 0.33,
+      cy - r * 0.06,
+      r * 0.085,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+    ctx.fillStyle =
+      'rgba(255,255,255,0.9)';
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx + side * r * 0.355,
+      cy - r * 0.09,
+      r * 0.028,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+  }
+
+
+  /* 豬鼻:橢圓 + 兩個鼻孔 */
+  const ny =
+    cy + r * 0.24;
+
+  ctx.fillStyle =
+    snout;
+
+  ctx.beginPath();
+
+  ctx.ellipse(
+    cx,
+    ny,
+    r * 0.30,
+    r * 0.21,
+    0,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.strokeStyle =
+    'rgba(0,0,0,0.14)';
+
+  ctx.lineWidth =
+    Math.max(1, r * 0.03);
+
+  ctx.stroke();
+
+  ctx.fillStyle =
+    ink;
+
+  for (const side of [-1, 1]) {
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+      cx + side * r * 0.115,
+      ny,
+      r * 0.045,
+      r * 0.075,
+      0,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+  }
+
+
+  /* 頂部柔光,增加蓬鬆感 */
+  ctx.fillStyle =
+    'rgba(255,255,255,0.18)';
+
+  ctx.beginPath();
+
+  ctx.ellipse(
+    cx - r * 0.22,
+    cy - r * 0.42,
+    r * 0.34,
+    r * 0.20,
+    -0.5,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+
+  ctx.restore();
+}
+
+
+/* =========================================================
+   絨毛底共用:柔和漸層身體 + 細毛
+========================================================= */
+
+function plushBody(
+  cx, cy, r,
+  light, mid, deep,
+  shadow
+) {
+
+  ctx.save();
+
+  ctx.shadowColor = shadow;
+  ctx.shadowBlur = cellSize * 0.13;
+  ctx.shadowOffsetY = cellSize * 0.05;
+
+  const body =
+    ctx.createRadialGradient(
+      cx - r * 0.32,
+      cy - r * 0.38,
+      r * 0.12,
+      cx, cy, r
+    );
+
+  body.addColorStop(0, light);
+  body.addColorStop(0.55, mid);
+  body.addColorStop(1, deep);
+
+  ctx.fillStyle = body;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.97, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+  ctx.restore();
+}
+
+
+function plushTicks(cx, cy, r, color) {
+
+  if (cellSize < 24)
+    return;
+
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = Math.max(1, r * 0.05);
+
+  const ticks = 16;
+
+  for (let i = 0; i < ticks; i++) {
+
+    const a =
+      (i / ticks) * Math.PI * 2 + 0.18;
+
+    ctx.beginPath();
+    ctx.moveTo(
+      cx + Math.cos(a) * r * 0.95,
+      cy + Math.sin(a) * r * 0.95
+    );
+    ctx.lineTo(
+      cx + Math.cos(a) * r * 1.05,
+      cy + Math.sin(a) * r * 1.05
+    );
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+
+/* =========================================================
+   皮膚:柴犬(白方 = 橘柴 / 黑方 = 灰柴)
+========================================================= */
+
+function drawShibaStone(x, y, c) {
+
+  const cx = margin + x * cellSize;
+  const cy = margin + y * cellSize;
+  const r = cellSize * 0.46;
+  const white = c === WHITE;
+
+  const furLight = white ? '#ffd39c' : '#d3dbe3';
+  const furMid   = white ? '#f39c50' : '#96a2af';
+  const furDeep  = white ? '#d87c31' : '#6d7885';
+  const earIn    = white ? '#ffbf87' : '#8b97a4';
+  const muzzle   = white ? '#fff3e0' : '#f4f7fa';
+  const ink      = white ? '#4a2c15' : '#2b333c';
+
+  plushBody(cx, cy, r, furLight, furMid, furDeep,
+    white ? 'rgba(160,80,20,0.30)' : 'rgba(30,40,50,0.32)');
+  plushTicks(cx, cy, r, furLight);
+
+  /* 立耳 */
+  const tri = (bx, by, side, scale, fill) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(bx - side * r * 0.18 * scale, by + r * 0.12 * scale);
+    ctx.quadraticCurveTo(bx + side * r * 0.02 * scale, by - r * 0.42 * scale,
+      bx + side * r * 0.30 * scale, by - r * 0.02 * scale);
+    ctx.quadraticCurveTo(bx + side * r * 0.20 * scale, by + r * 0.16 * scale,
+      bx - side * r * 0.18 * scale, by + r * 0.12 * scale);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  for (const side of [-1, 1]) {
+    const bx = cx + side * r * 0.48;
+    const by = cy - r * 0.42;
+    tri(bx, by, side, 1, furMid);
+    tri(bx + side * r * 0.02, by + r * 0.02, side, 0.55, earIn);
+  }
+
+  /* 口鼻區 */
+  ctx.fillStyle = muzzle;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.24, r * 0.40, r * 0.30, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* 眼睛 */
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.arc(cx + side * r * 0.31, cy - r * 0.10, r * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.arc(cx + side * r * 0.33, cy - r * 0.13, r * 0.026, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* 鼻 */
+  ctx.fillStyle = ink;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.10, r * 0.10, r * 0.075, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* 嘴 */
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.055, cy + r * 0.16, r * 0.06, 0.1, Math.PI - 0.4);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.055, cy + r * 0.16, r * 0.06, 0.4, Math.PI - 0.1);
+  ctx.stroke();
+}
+
+
+/* =========================================================
+   皮膚:貓咪(白方 = 白貓 / 黑方 = 黑貓)
+========================================================= */
+
+function drawCatStone(x, y, c) {
+
+  const cx = margin + x * cellSize;
+  const cy = margin + y * cellSize;
+  const r = cellSize * 0.46;
+  const white = c === WHITE;
+
+  const furLight = white ? '#ffffff' : '#6a6a7a';
+  const furMid   = white ? '#eef1f5' : '#4a4a5a';
+  const furDeep  = white ? '#cfd6de' : '#31313d';
+  const earIn    = white ? '#ffc9d6' : '#8a5a68';
+  const eyeCol   = white ? '#3aa0d8' : '#f5c542';
+  const ink      = white ? '#2a2f36' : '#101018';
+  const whisker  = white ? 'rgba(130,140,150,0.6)' : 'rgba(230,230,240,0.55)';
+
+  plushBody(cx, cy, r, furLight, furMid, furDeep,
+    white ? 'rgba(70,90,110,0.30)' : 'rgba(0,0,0,0.4)');
+  plushTicks(cx, cy, r, furLight);
+
+  /* 尖耳 */
+  const tri = (bx, by, side, scale, fill) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(bx - side * r * 0.16 * scale, by + r * 0.14 * scale);
+    ctx.quadraticCurveTo(bx + side * r * 0.0 * scale, by - r * 0.48 * scale,
+      bx + side * r * 0.26 * scale, by - r * 0.04 * scale);
+    ctx.quadraticCurveTo(bx + side * r * 0.18 * scale, by + r * 0.16 * scale,
+      bx - side * r * 0.16 * scale, by + r * 0.14 * scale);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  for (const side of [-1, 1]) {
+    const bx = cx + side * r * 0.46;
+    const by = cy - r * 0.44;
+    tri(bx, by, side, 1, furMid);
+    tri(bx + side * r * 0.02, by + r * 0.02, side, 0.5, earIn);
+  }
+
+  /* 眼睛:瞳孔呈直線 */
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = eyeCol;
+    ctx.beginPath();
+    ctx.ellipse(cx + side * r * 0.32, cy - r * 0.06, r * 0.095, r * 0.11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.ellipse(cx + side * r * 0.32, cy - r * 0.06, r * 0.032, r * 0.10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* 鼻 */
+  ctx.fillStyle = earIn;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.06, cy + r * 0.14);
+  ctx.lineTo(cx + r * 0.06, cy + r * 0.14);
+  ctx.lineTo(cx, cy + r * 0.235);
+  ctx.closePath();
+  ctx.fill();
+
+  /* 鬍鬚 */
+  if (cellSize >= 22) {
+    ctx.strokeStyle = whisker;
+    ctx.lineWidth = Math.max(0.8, r * 0.035);
+    for (const side of [-1, 1]) {
+      for (const dy of [-0.05, 0.03, 0.11]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.30, cy + r * dy + r * 0.12);
+        ctx.lineTo(cx + side * r * 0.74, cy + r * (dy - 0.10) + r * 0.12);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+
+/* =========================================================
+   皮膚:貓熊(白方 = 經典貓熊 / 黑方 = 棕貓熊)
+========================================================= */
+
+function drawPandaStone(x, y, c) {
+
+  const cx = margin + x * cellSize;
+  const cy = margin + y * cellSize;
+  const r = cellSize * 0.46;
+  const white = c === WHITE;
+
+  const faceLight = white ? '#ffffff' : '#ecd0a8';
+  const faceDeep  = white ? '#e4e7ec' : '#d4b184';
+  const patch     = white ? '#26282e' : '#54402f';
+  const eyeDot    = white ? '#ffffff' : '#f7ecd9';
+  const nose      = white ? '#26282e' : '#453324';
+
+  plushBody(cx, cy, r, faceLight, faceLight, faceDeep,
+    white ? 'rgba(40,44,52,0.30)' : 'rgba(70,50,30,0.32)');
+
+  /* 耳朵:圓耳 */
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = patch;
+    ctx.beginPath();
+    ctx.arc(cx + side * r * 0.52, cy - r * 0.50, r * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* 黑眼圈:斜橢圓 */
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = patch;
+    ctx.beginPath();
+    ctx.ellipse(cx + side * r * 0.32, cy - r * 0.10, r * 0.19, r * 0.26, side * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* 眼睛:眼圈內的小亮點 */
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = eyeDot;
+    ctx.beginPath();
+    ctx.arc(cx + side * r * 0.34, cy - r * 0.13, r * 0.055, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* 鼻 */
+  ctx.fillStyle = nose;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.22, r * 0.11, r * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* 嘴 */
+  ctx.strokeStyle = nose;
+  ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r * 0.30);
+  ctx.quadraticCurveTo(cx, cy + r * 0.38, cx - r * 0.08, cy + r * 0.40);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r * 0.30);
+  ctx.quadraticCurveTo(cx, cy + r * 0.38, cx + r * 0.08, cy + r * 0.40);
+  ctx.stroke();
+}
+
+
+/* =========================================================
+   皮膚:星空(白方 = 深藍星雲 / 黑方 = 紫粉星雲)
+========================================================= */
+
+const GALAXY_STARS = [
+  [0.4, 0.52, 0.05, 0.9],
+  [1.15, 0.68, 0.035, 0.65],
+  [1.9, 0.45, 0.05, 0.85],
+  [2.6, 0.72, 0.032, 0.55],
+  [3.35, 0.5, 0.055, 0.9],
+  [4.1, 0.66, 0.038, 0.7],
+  [4.9, 0.48, 0.045, 0.8],
+  [5.65, 0.70, 0.032, 0.6]
+];
+
+function drawGalaxyStone(x, y, c) {
+
+  const cx = margin + x * cellSize;
+  const cy = margin + y * cellSize;
+  const r = cellSize * 0.46;
+  const white = c === WHITE;
+
+  const halo = white ? 'rgba(140,200,255,0.9)' : 'rgba(230,160,255,0.9)';
+  const planet = white ? '#bfe3ff' : '#f0c4ff';
+
+  ctx.save();
+
+  ctx.shadowColor = halo;
+  ctx.shadowBlur = cellSize * 0.16;
+  ctx.shadowOffsetY = cellSize * 0.04;
+
+  const base =
+    ctx.createRadialGradient(
+      cx - r * 0.3,
+      cy - r * 0.35,
+      r * 0.1,
+      cx, cy, r
+    );
+
+  if (white) {
+    base.addColorStop(0, '#7fd4ff');
+    base.addColorStop(0.55, '#2e6fe0');
+    base.addColorStop(1, '#131f47');
+  } else {
+    base.addColorStop(0, '#e08aff');
+    base.addColorStop(0.55, '#7a3fd4');
+    base.addColorStop(1, '#22103e');
+  }
+
+  ctx.fillStyle = base;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.97, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+
+  /* 星星:固定位置,重繪不閃爍 */
+  for (const [a, d, s, alpha] of GALAXY_STARS) {
+
+    ctx.fillStyle =
+      `rgba(255,255,255,${alpha})`;
+
+    ctx.beginPath();
+    ctx.arc(
+      cx + Math.cos(a) * r * d,
+      cy + Math.sin(a) * r * d,
+      Math.max(0.8, r * s * 0.18),
+      0, Math.PI * 2
+    );
+    ctx.fill();
+  }
+
+  /* 小行星:發光圓點 */
+  ctx.fillStyle = planet;
+  ctx.shadowColor = halo;
+  ctx.shadowBlur = r * 0.25;
+
+  ctx.beginPath();
+  ctx.arc(
+    cx + Math.cos(3.8) * r * 0.30,
+    cy + Math.sin(3.8) * r * 0.30,
+    r * 0.11,
+    0, Math.PI * 2
+  );
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+
+  /* 光暈邊緣 */
+  ctx.strokeStyle =
+    white
+      ? 'rgba(140,200,255,0.5)'
+      : 'rgba(230,160,255,0.5)';
+
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.94, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+
+/* =========================================================
+   皮膚:數學(白方 = 方格紙 π / 黑方 = 黑板 Σ)
+========================================================= */
+
+function drawMathStone(x, y, c) {
+
+  const cx = margin + x * cellSize;
+  const cy = margin + y * cellSize;
+  const r = cellSize * 0.46;
+  const white = c === WHITE;
+
+  ctx.save();
+
+  ctx.shadowColor =
+    white
+      ? 'rgba(90,80,40,0.30)'
+      : 'rgba(0,0,0,0.40)';
+
+  ctx.shadowBlur = cellSize * 0.13;
+  ctx.shadowOffsetY = cellSize * 0.05;
+
+  /* 主體:紙張 / 黑板 */
+  const body =
+    ctx.createRadialGradient(
+      cx - r * 0.3,
+      cy - r * 0.35,
+      r * 0.12,
+      cx, cy, r
+    );
+
+  if (white) {
+    body.addColorStop(0, '#fbf7ea');
+    body.addColorStop(0.6, '#f1e9d2');
+    body.addColorStop(1, '#ddd1b0');
+  } else {
+    body.addColorStop(0, '#3d5a4f');
+    body.addColorStop(0.6, '#2c443c');
+    body.addColorStop(1, '#1c2f29');
+  }
+
+  ctx.fillStyle = body;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.97, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+
+  if (white) {
+
+    /* 方格紙:淡藍格線 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.strokeStyle =
+      'rgba(90,130,190,0.22)';
+
+    ctx.lineWidth =
+      Math.max(0.7, r * 0.03);
+
+    for (let i = -2; i <= 2; i++) {
+
+      const g = i * r * 0.42;
+
+      ctx.beginPath();
+      ctx.moveTo(cx + g, cy - r);
+      ctx.lineTo(cx + g, cy + r);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy + g);
+      ctx.lineTo(cx + r, cy + g);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    /* 紙緣 */
+    ctx.strokeStyle =
+      'rgba(120,100,60,0.35)';
+
+    ctx.lineWidth = Math.max(1, r * 0.05);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.92, 0, Math.PI * 2);
+    ctx.stroke();
+
+    /* π:石墨雙描,手寫感 */
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.font =
+      `italic bold ${Math.round(r * 0.95)}px Georgia, "Times New Roman", serif`;
+
+    ctx.fillStyle =
+      'rgba(58,58,69,0.35)';
+
+    ctx.fillText(
+      'π',
+      cx + r * 0.04,
+      cy + r * 0.10
+    );
+
+    ctx.fillStyle = '#3a3a45';
+
+    ctx.fillText('π', cx, cy + r * 0.07);
+
+    /* 角落小註記 */
+    ctx.fillStyle = 'rgba(58,58,69,0.5)';
+    ctx.font = `bold ${Math.round(r * 0.3)}px Georgia, serif`;
+    ctx.fillText('+', cx - r * 0.58, cy - r * 0.44);
+    ctx.fillText('=', cx + r * 0.56, cy + r * 0.52);
+
+  } else {
+
+    /* 黑板:粉筆殘跡 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.9, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.strokeStyle = 'rgba(240,238,225,0.08)';
+    ctx.lineWidth = r * 0.12;
+
+    for (let i = 0; i < 3; i++) {
+
+      ctx.beginPath();
+      ctx.moveTo(
+        cx - r + i * 4,
+        cy - r * 0.2 + i * r * 0.5
+      );
+      ctx.lineTo(
+        cx + r,
+        cy - r * 0.4 + i * r * 0.5
+      );
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    /* 圓規虛線圈 */
+    ctx.strokeStyle = 'rgba(242,240,230,0.5)';
+    ctx.lineWidth = Math.max(0.8, r * 0.035);
+    ctx.setLineDash([r * 0.08, r * 0.07]);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    /* Σ:粉筆白雙描 */
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.font =
+      `bold ${Math.round(r * 0.95)}px Georgia, "Times New Roman", serif`;
+
+    ctx.fillStyle = 'rgba(242,240,230,0.35)';
+
+    ctx.fillText(
+      'Σ',
+      cx + r * 0.04,
+      cy + r * 0.08
+    );
+
+    ctx.fillStyle = '#f2f0e6';
+
+    ctx.fillText('Σ', cx, cy + r * 0.05);
+
+    /* 粉筆小十字 */
+    ctx.strokeStyle = 'rgba(242,240,230,0.55)';
+    ctx.lineWidth = Math.max(0.8, r * 0.04);
+
+    const px = cx + r * 0.55;
+    const py = cy - r * 0.42;
+    const s = r * 0.09;
+
+    ctx.beginPath();
+    ctx.moveTo(px - s, py);
+    ctx.lineTo(px + s, py);
+    ctx.moveTo(px, py - s);
+    ctx.lineTo(px, py + s);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+
+/* =========================================================
+   Skin Preview(皮膚預覽:在設置面板渲染
+   每套皮膚的黑白成對棋子樣本)
+========================================================= */
+
+function renderStonePair(canvas, skin, halfOnly) {
+
+  if (!canvas)
+    return;
+
+  const dpr =
+    window.devicePixelRatio || 1;
+
+  const w =
+    canvas.clientWidth ||
+    (halfOnly ? 56 : 320);
+
+  const h =
+    canvas.clientHeight ||
+    (halfOnly ? 28 : 72);
+
+  canvas.width =
+    Math.round(w * dpr);
+
+  canvas.height =
+    Math.round(h * dpr);
+
+  /*
+   * 暫時切換繪圖環境,
+   * 重用棋盤的 drawStone 繪製樣本
+   */
+  const saveCtx = ctx;
+  const saveMargin = margin;
+  const saveCell = cellSize;
+
+  ctx = canvas.getContext('2d');
+
+  ctx.scale(dpr, dpr);
+
+  const wood =
+    ctx.createLinearGradient(0, 0, 0, h);
+
+  wood.addColorStop(0, '#e8c78f');
+  wood.addColorStop(1, '#d3a75e');
+
+  ctx.fillStyle = wood;
+  ctx.fillRect(0, 0, w, h);
+
+  margin = 0;
+
+  if (halfOnly) {
+
+    /*
+     * 小預覽:兩子對放——
+     * 黑子貼左緣露右半,白子貼右緣露左半,
+     * 於中央相接,各自只露朝內的一邊
+     */
+    cellSize = h * 0.95;
+
+    const rr =
+      cellSize * 0.46;
+
+    const cyT = h / 2;
+
+    margin = w / 2 - rr;
+    drawStone(0, (cyT - margin) / cellSize, BLACK, skin);
+
+    margin = w / 2 + rr;
+    drawStone(0, (cyT - margin) / cellSize, WHITE, skin);
+
+  } else {
+
+    /*
+     * 大預覽:兩顆完整棋子並排置中
+     */
+    cellSize = h;
+
+    const cyTarget = h / 2;
+
+    /* 黑子(左) */
+    margin = w * 0.25;
+    drawStone(0, (cyTarget - margin) / cellSize, BLACK, skin);
+
+    /* 白子(右) */
+    margin = w * 0.75;
+    drawStone(0, (cyTarget - margin) / cellSize, WHITE, skin);
+  }
+
+  ctx = saveCtx;
+  margin = saveMargin;
+  cellSize = saveCell;
+}
+
+
+function renderSkinPreviews() {
+
+  /*
+   * 縮圖:每套皮膚一張小樣本
+   */
+  document
+    .querySelectorAll('#skinSeg .skin-thumb')
+    .forEach(thumb => {
+
+      renderStonePair(
+        thumb.querySelector('canvas'),
+        thumb.dataset.value,
+        true
+      );
+    });
+
+  updateSkinPreview();
+}
+
+
+function updateSkinPreview() {
+
+  /*
+   * 大預覽:當前選中皮膚的黑白成對棋子
+   */
+  renderStonePair(
+    document.getElementById('skinPreviewMain'),
+    window.GoSettings?.get?.().skin || 'classic'
+  );
+
+  updateSkinPreviewName();
+}
+
+
+function updateSkinPreviewName() {
+
+  const nameEl =
+    document.getElementById('skinPreviewName');
+
+  if (nameEl) {
+
+    nameEl.textContent =
+      t('skin.' + (window.GoSettings?.get?.().skin || 'classic'));
+  }
+}
+
+
+window.GoBoard = {
+  renderSkinPreviews,
+  updateSkinPreview,
+  updateSkinPreviewName
+};
 
 
 /* =========================================================
@@ -1917,6 +3176,36 @@ if (boardCanvas) {
           pos.x,
           pos.y
         );
+
+      } else if (
+        mode !== 'spectate' &&
+        game &&
+        game.gameOver &&
+        pos &&
+        game.board[pos.x][pos.y] !==
+        EMPTY
+      ) {
+
+        /*
+         * 終局點目:點擊棋組標記/取消死子
+         */
+        if (
+          game.toggleDead(
+            pos.x,
+            pos.y
+          )
+        ) {
+
+          sendMessage({
+            type: 'toggleDead',
+            x: pos.x,
+            y: pos.y
+          });
+
+          updateUI();
+
+          drawBoard();
+        }
       }
     }
   );
@@ -2243,6 +3532,20 @@ $('backFromJoin')
     'click',
     () => {
 
+      /*
+       * 離開加入/觀戰畫面時必須銷毀
+       * 還在握手中的連線,否則它完成連線後
+       * 會把使用者強拉進對應的模式
+       */
+      if (peerInst) {
+
+        try {
+          peerInst.destroy();
+        } catch (e) {}
+
+        peerInst = null;
+      }
+
       showLobbyHome();
     }
   );
@@ -2278,6 +3581,36 @@ $('submitRoomBtn')
   );
 
 
+$('submitSpectateBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      const v =
+        (
+          $('p2pRoomInput')
+            ?.value || ''
+        )
+          .trim()
+          .toUpperCase();
+
+
+      if (v.length >= 4) {
+
+        peerSpectateRoom(v);
+
+      } else {
+
+        setP2PStatus(
+          'join',
+          t('dyn.invalidCode'),
+          'error'
+        );
+      }
+    }
+  );
+
+
 function handleAction(act) {
 
   let size = 19;
@@ -2299,6 +3632,21 @@ function handleAction(act) {
 
 
   if (act === 'hotseat') {
+
+    /*
+     * 單機模式絕不被殘留的連線流程劫持:
+     * 銷毀任何還在背景握手的加入/觀戰連線
+     */
+    if (peerInst) {
+
+      try {
+        peerInst.destroy();
+      } catch (e) {}
+
+      peerInst = null;
+    }
+
+    spectatorConns.clear();
 
     startGame(
       'hotseat',
@@ -2338,6 +3686,16 @@ function startGame(
   mode = m;
 
   myColor = color;
+
+
+  /* 玩家模式:操作區可見 */
+  document
+    .querySelector(
+      '.game-layout .actions'
+    )
+    ?.classList.remove(
+      'hidden'
+    );
 
 
   if (
@@ -2415,9 +3773,14 @@ function startGame(
 
 function applyMoveRemote(r) {
 
+  /*
+   * 協議防護:落子結果不得帶 pass 標記,
+   * 避免虛手訊息被誤當落子套用
+   */
   if (
     !r ||
     !r.ok ||
+    r.pass ||
     !game
   ) {
     return;
@@ -2471,7 +3834,7 @@ function applyMoveRemote(r) {
 
 
   game.passCount =
-    r.passCount || 0;
+    game.consecutivePasses();
 
 
   game.history.push({
@@ -2516,8 +3879,22 @@ function applyMoveRemote(r) {
 
 function applyPassRemote(r) {
 
-  if (!game || !r)
+  /*
+   * 協議防護:虛手結果必須帶 pass 標記,
+   * 落子訊息誤入此處一律丟棄
+   */
+  if (!game || !r || !r.pass)
     return;
+
+
+  addLog(
+    t('log.pass', {
+      p:
+        r.passingPlayer === BLACK
+          ? t('player.black')
+          : t('player.white')
+    })
+  );
 
 
   game.captures =
@@ -2549,13 +3926,20 @@ function applyPassRemote(r) {
   game.koPoint = null;
 
   game.passCount =
-    r.passCount || 1;
+    game.consecutivePasses();
 
 
   if (r.gameOver) {
 
     game.gameOver =
       true;
+
+    addLog(
+      t('scoring.hint'),
+      'system'
+    );
+
+    announceResult();
   }
 
 
@@ -2597,10 +3981,27 @@ function doMove(
   }
 
 
-  sendMessage({
+  if (!sendMessage({
     type: 'move',
     result: r
-  });
+  })) {
+
+    addLog(
+      t('net.sendFailed'),
+      'error'
+    );
+  }
+
+
+  if (r.gameOver) {
+
+    addLog(
+      t('scoring.hint'),
+      'system'
+    );
+
+    announceResult();
+  }
 
 
   updateUI();
@@ -2608,12 +4009,44 @@ function doMove(
   drawBoard();
 
   saveGameToStorage();
+}
 
 
-  window.GoSound?.play(
-    r.captured && r.captured.length
-      ? 'capture'
-      : 'stone'
+/* =========================================================
+   Announce Result(終局自動彈出勝負)
+========================================================= */
+
+function announceResult() {
+
+  if (!game || !game.gameOver)
+    return;
+
+  const score =
+    game.calculateChineseScore(
+      7.5
+    );
+
+  const body =
+    t('result.body', {
+      w:
+        score.winner === BLACK
+          ? t('color.black')
+          : t('color.white'),
+      d:
+        score.diff.toFixed(1),
+      b: score.blackTotal,
+      c: score.whiteTotal
+    });
+
+  addLog(
+    body,
+    'good'
+  );
+
+  showModal(
+    t('result.title'),
+    body,
+    () => {}
   );
 }
 
@@ -2636,10 +4069,37 @@ function doPass() {
     return;
 
 
-  sendMessage({
+  addLog(
+    t('log.pass', {
+      p:
+        r.passingPlayer === BLACK
+          ? t('player.black')
+          : t('player.white')
+    })
+  );
+
+
+  if (!sendMessage({
     type: 'pass',
     result: r
-  });
+  })) {
+
+    addLog(
+      t('net.sendFailed'),
+      'error'
+    );
+  }
+
+
+  if (r.gameOver) {
+
+    addLog(
+      t('scoring.hint'),
+      'system'
+    );
+
+    announceResult();
+  }
 
 
   updateUI();
@@ -2657,6 +4117,11 @@ function doPass() {
 function doNewGame(
   fromRemote = false
 ) {
+
+  /* 觀戰者不能重置對局 */
+  if (mode === 'spectate' && !fromRemote)
+    return;
+
 
   if (!game)
     return;
@@ -2689,12 +4154,24 @@ function doNewGame(
 
 function sendMessage(msg) {
 
+  /*
+   * 單機模式:一切都在本機完成,
+   * 訊息無需(也無法)發送
+   */
+  if (mode === 'hotseat') {
+    return true;
+  }
+
   const payload =
     JSON.stringify(msg);
+
+  let sent = false;
 
 
   /*
    * 優先使用目前主要连接。
+   * (不提早 return:後面的觀戰廣播
+   *  必須繼續執行)
    */
   if (
     peerConn &&
@@ -2707,7 +4184,7 @@ function sendMessage(msg) {
         payload
       );
 
-      return true;
+      sent = true;
 
     } catch (e) {
 
@@ -2721,10 +4198,37 @@ function sendMessage(msg) {
 
   /*
    * 尝试其它连接。
+   * (peerConn 已發過,跳過避免重複)
    */
   for (
     const c
     of peerConnections
+  ) {
+
+    try {
+
+      if (
+        c &&
+        c.open &&
+        c !== peerConn
+      ) {
+
+        c.send(payload);
+
+        sent = true;
+      }
+
+    } catch (e) {}
+  }
+
+
+  /*
+   * 對局訊息廣播給所有觀戰者,
+   * 觀戰端自行過濾玩家間協商訊息
+   */
+  for (
+    const c
+    of spectatorConns
   ) {
 
     try {
@@ -2736,14 +4240,53 @@ function sendMessage(msg) {
 
         c.send(payload);
 
-        return true;
+        sent = true;
       }
 
     } catch (e) {}
   }
 
 
-  return false;
+  /* 診斷:Console 過濾 [GO] 可追蹤訊息流 */
+  if (msg.type !== 'ping' && msg.type !== 'pong') {
+    console.info('[GO→]', msg.type, sent ? '✓' : '✗未送出', isHost ? '(房主)' : '(客端)');
+  }
+
+
+  return sent;
+}
+
+
+/* =========================================================
+   Relay To Spectators
+   (房主把玩家傳來的訊息轉發給觀戰者)
+========================================================= */
+
+function relayToSpectators(msg) {
+
+  if (!isHost || !spectatorConns.size)
+    return;
+
+  const payload =
+    JSON.stringify(msg);
+
+  for (
+    const c
+    of spectatorConns
+  ) {
+
+    try {
+
+      if (
+        c &&
+        c.open
+      ) {
+
+        c.send(payload);
+      }
+
+    } catch (e) {}
+  }
 }
 
 
@@ -2752,6 +4295,11 @@ function sendMessage(msg) {
 ========================================================= */
 
 function requestUndo() {
+
+  /* 觀戰者不能發動悔棋 */
+  if (mode === 'spectate')
+    return;
+
 
   if (
     !game ||
@@ -3003,7 +4551,6 @@ function updateUI() {
           7.5
         );
 
-
       txt.textContent = t(
         'dyn.gameOver',
         {
@@ -3024,18 +4571,29 @@ function updateUI() {
           : t('player.white');
 
 
+      let suffix = '';
+
+      if (mode === 'spectate') {
+
+        suffix = t('turn.spectating');
+
+      } else if (game.passCount === 1) {
+
+        /*
+         * 一方已虛手:提示再虛手一次即終局
+         */
+        suffix = t('turn.onePass');
+
+      } else if (mode !== 'hotseat') {
+
+        suffix =
+          myColor === game.currentPlayer
+            ? t('dyn.turnYou')
+            : t('dyn.turnWait');
+      }
+
       txt.textContent =
-        name +
-        (
-          mode !== 'hotseat'
-            ? (
-                myColor ===
-                game.currentPlayer
-                  ? t('dyn.turnYou')
-                  : t('dyn.turnWait')
-              )
-            : ''
-        );
+        name + suffix;
     }
   }
 
@@ -3352,6 +4910,140 @@ async function reconnectToRoom() {
 
 
 /* =========================================================
+   Board Has Stones(盤上是否有值得續戰的局面)
+========================================================= */
+
+function boardHasStones(g) {
+
+  if (!g)
+    return false;
+
+  for (let x = 0; x < g.size; x++) {
+
+    for (let y = 0; y < g.size; y++) {
+
+      if (g.board[x][y] !== EMPTY)
+        return true;
+    }
+  }
+
+  return false;
+}
+
+
+/* =========================================================
+   Host Accept Player(收到 hello['play']
+   或舊版客戶端的 requestSync 時接納玩家)
+========================================================= */
+
+function hostAcceptPlayer(conn) {
+
+  if (!conn || conn.__goIsPlayer)
+    return;
+
+  conn.__goIsPlayer = true;
+
+  console.info('[GO] 玩家已接納');
+
+
+  /*
+   * 新玩家加入時的棋局取捨:
+   * - 上一個對手正常離開,或
+   * - 盤上沒有棋子(空盤、只按過虛手的殘留狀態)
+   * → 重置,不把殘留狀態帶給新玩家;
+   * - 盤上有棋(對局中斷線)
+   * → 保留,讓對手重連續戰。
+   */
+  if (
+    opponentLeft ||
+    !game ||
+    !boardHasStones(game)
+  ) {
+
+    game =
+      new GoGame(
+        game ? game.size : 19
+      );
+
+    opponentLeft = false;
+  }
+
+
+  /*
+   * 新玩家接手:確認身份後才關閉
+   * 並清理舊的玩家連線
+   * (觀戰者連入不會走到這裡)
+   */
+  if (peerConn && peerConn !== conn) {
+
+    try {
+      peerConn.close();
+    } catch (e) {}
+
+    removeConnection(
+      peerConn
+    );
+  }
+
+
+  peerConn = conn;
+
+  peerConnections.add(
+    conn
+  );
+
+  opponentLeft = false;
+
+  reconnectAttempts = 0;
+
+  setConnStatus(
+    t('net.oppConnected'),
+    'ok'
+  );
+
+  startHeartbeat();
+
+  startGame(
+    'p2p',
+    game ? game.size : 19,
+    BLACK
+  );
+
+  addLog(
+    t('net.oppJoined'),
+    'good'
+  );
+
+  if (game && conn.open) {
+
+    try {
+
+      conn.send(
+        JSON.stringify({
+          type: 'syncState',
+          state:
+            game.getFullState()
+        })
+      );
+
+    } catch (e) {}
+  }
+
+
+  /*
+   * 新玩家加入可能重置了棋局:
+   * 把最新狀態也同步給所有觀戰者,
+   * 觀戰畫面才不會停在上一局的殘局
+   */
+  relayToSpectators({
+    type: 'syncState',
+    state:
+      game.getFullState()
+  });
+}
+
+
+/* =========================================================
    Connection Handlers
 ========================================================= */
 
@@ -3426,6 +5118,109 @@ function installConnHandlers(
         return;
 
 
+      /* 診斷:Console 過濾 [GO] 可追蹤訊息流 */
+      if (m.type !== 'ping' && m.type !== 'pong') {
+        console.info('[GO←]', m.type, isHost ? '(房主)' : '(客端)');
+      }
+
+
+      /*
+       * 觀戰連線只能聊天/心跳/請求同步:
+       * 任何會影響對局的訊息一律忽略,
+       * 觀戰者無法以此影響棋局
+       */
+      if (
+        spectatorConns.has(conn) &&
+        m.type !== 'chatMessage' &&
+        m.type !== 'ping' &&
+        m.type !== 'pong' &&
+        m.type !== 'requestSync' &&
+        m.type !== 'hello'
+      ) {
+        return;
+      }
+
+
+      /*
+       * 觀戰模式:只套用棋局同步類訊息,
+       * 忽略玩家間協商(悔棋請求/拒絕)
+       */
+      if (
+        mode === 'spectate' &&
+        (
+          m.type === 'undoRequest' ||
+          m.type === 'undoReject'
+        )
+      ) {
+        return;
+      }
+
+
+      /* Hello:表明身份(玩家/觀戰) */
+
+      if (
+        m.type === 'hello'
+      ) {
+
+        if (isHost) {
+
+          if (
+            m.role === 'spectate'
+          ) {
+
+            spectatorConns.add(
+              conn
+            );
+
+            conn.__goSpectateName =
+              m.name ||
+              t('chat.spectator');
+
+            try {
+
+              window.GoChat?.hookConn?.(
+                conn
+              );
+
+            } catch (e) {}
+
+
+            if (
+              game &&
+              conn.open
+            ) {
+
+              try {
+
+                conn.send(
+                  JSON.stringify({
+                    type: 'syncState',
+                    state:
+                      game.getFullState()
+                  })
+                );
+
+              } catch (e) {}
+            }
+
+
+            addLog(
+              t('log.spectateJoined', {
+                n: conn.__goSpectateName
+              }),
+              'system'
+            );
+
+          } else {
+
+            hostAcceptPlayer(conn);
+          }
+        }
+
+        return;
+      }
+
+
       /* Ping */
 
       if (
@@ -3469,6 +5264,30 @@ function installConnHandlers(
         m.type === 'leave'
       ) {
 
+        /*
+         * 觀戰者離開:不影響對局狀態
+         */
+        if (
+          spectatorConns.has(conn)
+        ) {
+
+          spectatorConns.delete(
+            conn
+          );
+
+          addLog(
+            t('log.spectateLeft', {
+              n:
+                conn.__goSpectateName ||
+                t('chat.spectator')
+            }),
+            'system'
+          );
+
+          return;
+        }
+
+
         opponentLeft = true;
 
         stopHeartbeat();
@@ -3498,30 +5317,44 @@ function installConnHandlers(
         m.type === 'requestSync'
       ) {
 
-        if (
-          isHost &&
-          game &&
-          conn.open
-        ) {
+        if (isHost) {
 
-          try {
+          /*
+           * 舊版客戶端不送 hello:
+           * 收到 requestSync 視為玩家加入
+           */
+          if (
+            !spectatorConns.has(conn)
+          ) {
 
-            conn.send(
-              JSON.stringify({
+            hostAcceptPlayer(conn);
+          }
 
-                type: 'syncState',
 
-                state:
-                  game.getFullState()
-              })
-            );
+          if (
+            game &&
+            conn.open
+          ) {
 
-          } catch (e) {
+            try {
 
-            console.warn(
-              'syncState send failed',
-              e
-            );
+              conn.send(
+                JSON.stringify({
+
+                  type: 'syncState',
+
+                  state:
+                    game.getFullState()
+                })
+              );
+
+            } catch (e) {
+
+              console.warn(
+                'syncState send failed',
+                e
+              );
+            }
           }
         }
 
@@ -3539,6 +5372,8 @@ function installConnHandlers(
           m.result
         );
 
+        relayToSpectators(m);
+
         return;
       }
 
@@ -3553,6 +5388,35 @@ function installConnHandlers(
           m.result
         );
 
+        relayToSpectators(m);
+
+        return;
+      }
+
+
+      /* Dead stone marking(終局點目) */
+
+      if (
+        m.type === 'toggleDead'
+      ) {
+
+        if (
+          game &&
+          game.gameOver
+        ) {
+
+          game.toggleDead(
+            m.x,
+            m.y
+          );
+
+          updateUI();
+
+          drawBoard();
+        }
+
+        relayToSpectators(m);
+
         return;
       }
 
@@ -3564,6 +5428,8 @@ function installConnHandlers(
       ) {
 
         doNewGame(true);
+
+        relayToSpectators(m);
 
         return;
       }
@@ -3592,6 +5458,8 @@ function installConnHandlers(
       ) {
 
         onUndoAccept(m);
+
+        relayToSpectators(m);
 
         return;
       }
@@ -3666,11 +5534,21 @@ function installConnHandlers(
     'open',
     () => {
 
-      peerConn = conn;
+      console.info('[GO] 連線開啟', isHost ? '(房主端,等待 hello)' : '(客端)');
 
-      peerConnections.add(
-        conn
-      );
+      /*
+       * 玩家/觀戰端:主連線登記。
+       * 房主端延後到 hello 才決定身份,
+       * 避免觀戰連線暫佔玩家主連線。
+       */
+      if (!isHost) {
+
+        peerConn = conn;
+
+        peerConnections.add(
+          conn
+        );
+      }
 
 
       opponentLeft = false;
@@ -3688,27 +5566,51 @@ function installConnHandlers(
       }
 
 
-      setConnStatus(
-        t('net.connected'),
-        'ok'
-      );
+      if (!isHost) {
 
-
-      startHeartbeat();
-
-
-      /*
-       * 要求对方同步棋盘。
-       */
-      try {
-
-        conn.send(
-          JSON.stringify({
-            type: 'requestSync'
-          })
+        setConnStatus(
+          t('net.connected'),
+          'ok'
         );
 
-      } catch (e) {}
+
+        startHeartbeat();
+
+
+        /*
+         * 表明身份:玩家 / 觀戰。
+         * 舊版客戶端不送 hello,
+         * 房主以 requestSync 回退為玩家。
+         */
+        try {
+
+          conn.send(
+            JSON.stringify({
+              type: 'hello',
+              role: joinRole,
+              name:
+                joinRole === 'spectate'
+                  ? (
+                      window.GoChat?.getName?.() ||
+                      t('chat.spectator')
+                    )
+                  : undefined
+            })
+          );
+
+        } catch (e) {}
+
+
+        try {
+
+          conn.send(
+            JSON.stringify({
+              type: 'requestSync'
+            })
+          );
+
+        } catch (e) {}
+      }
     }
   );
 
@@ -3720,6 +5622,31 @@ function installConnHandlers(
   conn.on(
     'close',
     () => {
+
+      /*
+       * 觀戰者斷線:清理名單即可,
+       * 不觸發重連/對手中斷流程
+       */
+      if (
+        spectatorConns.has(conn)
+      ) {
+
+        spectatorConns.delete(
+          conn
+        );
+
+        addLog(
+          t('log.spectateLeft', {
+            n:
+              conn.__goSpectateName ||
+              t('chat.spectator')
+          }),
+          'system'
+        );
+
+        return;
+      }
+
 
       removeConnection(
         conn
@@ -3984,88 +5911,14 @@ async function peerHostRoom(
     conn => {
 
       /*
-       * 如果已经有旧连接，
-       * 先关闭旧连接。
+       * 身份待 hello 抵達後決定:
+       * 玩家 → hostAcceptPlayer(此時才頂替舊玩家連線)
+       * 觀戰 → 加入觀戰名單。
+       * 舊連線的關閉不能在這裡做:
+       * 觀戰者連入時不該踢掉對局中的玩家。
        */
-      if (
-        peerConn &&
-        peerConn !== conn
-      ) {
-
-        try {
-          peerConn.close();
-        } catch (e) {}
-
-        removeConnection(
-          peerConn
-        );
-      }
-
-
-      peerConn = conn;
-
-      peerConnections.add(
-        conn
-      );
-
-
       installConnHandlers(
         conn
-      );
-
-
-      conn.on(
-        'open',
-        () => {
-
-          opponentLeft = false;
-
-          reconnectAttempts = 0;
-
-
-          setConnStatus(
-            t('net.oppConnected'),
-            'ok'
-          );
-
-
-          startHeartbeat();
-
-
-          /*
-           * 进入游戏。
-           */
-          startGame(
-            'p2p',
-            size,
-            BLACK
-          );
-
-
-          addLog(
-            t('net.oppJoined'),
-            'good'
-          );
-
-
-          /*
-           * 发送完整棋盘。
-           */
-          try {
-
-            conn.send(
-              JSON.stringify({
-
-                type:
-                  'syncState',
-
-                state:
-                  game.getFullState()
-              })
-            );
-
-          } catch (e) {}
-        }
       );
     }
   );
@@ -4190,6 +6043,8 @@ async function peerJoinRoom(
 
   isHost = false;
 
+  joinRole = 'play';
+
   manuallyLeaving = false;
 
   opponentLeft = false;
@@ -4263,6 +6118,21 @@ async function peerJoinRoom(
   peerInst.on(
     'open',
     () => {
+
+      /*
+       * 握手期間使用者可能已返回大廳:
+       * 放棄加入,銷毀連線
+       */
+      if (joinScreenAbandoned()) {
+
+        try {
+          peerInst.destroy();
+        } catch (e) {}
+
+        peerInst = null;
+
+        return;
+      }
 
       connectToHost();
     }
@@ -4382,6 +6252,19 @@ function connectToHost() {
     () => {
 
       /*
+       * 使用者已離開加入畫面:放棄進入
+       */
+      if (joinScreenAbandoned()) {
+
+        try {
+          conn.close();
+        } catch (e) {}
+
+        return;
+      }
+
+
+      /*
        * 加入者执白。
        */
       myColor = WHITE;
@@ -4449,6 +6332,287 @@ function connectToHost() {
       /*
        * 请求房主同步。
        */
+      try {
+
+        conn.send(
+          JSON.stringify({
+            type: 'requestSync'
+          })
+        );
+
+      } catch (e) {}
+    }
+  );
+}
+
+
+/* =========================================================
+   Join Screen Abandoned
+   (使用者已離開加入/觀戰畫面?未完成的
+    連線流程不得再進入對局)
+========================================================= */
+
+function joinScreenAbandoned() {
+
+  const js =
+    $('p2pJoinScreen');
+
+  return !js ||
+    js.classList.contains(
+      'hidden'
+    );
+}
+
+
+/* =========================================================
+   Spectate Room(觀戰:只同步,不可操作)
+========================================================= */
+
+async function peerSpectateRoom(
+  code
+) {
+
+  isHost = false;
+
+  joinRole = 'spectate';
+
+  manuallyLeaving = false;
+
+  opponentLeft = false;
+
+  reconnectAttempts = 0;
+
+
+  code =
+    code
+      .toUpperCase()
+      .trim();
+
+  p2pRoomCode =
+    code;
+
+  setP2PStatus(
+    'join',
+    t('net.spectating', {
+      c: code
+    }),
+    'pending'
+  );
+
+
+  if (peerInst) {
+
+    try {
+      peerInst.destroy();
+    } catch (e) {}
+
+    peerInst = null;
+  }
+
+
+  if (
+    !peerLoaded &&
+    !(await loadPeerJS())
+  ) {
+
+    setP2PStatus(
+      'join',
+      t('net.peerFail'),
+      'error'
+    );
+
+    return;
+  }
+
+
+  peerInst =
+    new Peer({
+      debug: 1,
+
+      secure: true,
+
+      port: 443,
+
+      config: {
+        iceServers: [
+          {
+            urls:
+              'stun:stun.l.google.com:19302'
+          }
+        ]
+      }
+    });
+
+
+  peerInst.on(
+    'open',
+    () => {
+
+      /*
+       * 握手期間使用者可能已返回大廳:
+       * 放棄進入,銷毀連線
+       */
+      if (joinScreenAbandoned()) {
+
+        try {
+          peerInst.destroy();
+        } catch (e) {}
+
+        peerInst = null;
+
+        return;
+      }
+
+      connectAsSpectator();
+    }
+  );
+
+
+  peerInst.on(
+    'disconnected',
+    () => {
+
+      if (manuallyLeaving)
+        return;
+
+
+      /*
+       * 使用者已離開觀戰畫面:
+       * 銷毀連線,不再重連
+       */
+      if (joinScreenAbandoned()) {
+
+        try {
+          peerInst.destroy();
+        } catch (e) {}
+
+        peerInst = null;
+
+        return;
+      }
+
+
+      setConnStatus(
+        t('net.recovering'),
+        'pending'
+      );
+
+
+      try {
+
+        peerInst.reconnect();
+
+      } catch (e) {
+
+        /*
+         * 觀戰不自動重連,
+         * 可手動重新加入房間
+         */
+      }
+    }
+  );
+}
+
+
+function connectAsSpectator() {
+
+  const conn =
+    peerInst.connect(
+      'GO-' + p2pRoomCode,
+      { reliable: true }
+    );
+
+
+  installConnHandlers(conn);
+
+
+  conn.on(
+    'open',
+    () => {
+
+      /*
+       * 使用者已離開觀戰畫面:放棄進入
+       */
+      if (joinScreenAbandoned()) {
+
+        try {
+          conn.close();
+        } catch (e) {}
+
+        return;
+      }
+
+      mode = 'spectate';
+
+      myColor = null;
+
+      /*
+       * 觀戰模式:隱藏操作區
+       * (虛手/悔棋/新對局都與觀戰者無關)
+       */
+      document
+        .querySelector(
+          '.game-layout .actions'
+        )
+        ?.classList.add(
+          'hidden'
+        );
+
+      if (!game) {
+
+        game =
+          new GoGame(19);
+      }
+
+
+      lobby
+        ?.classList.add(
+          'hidden'
+        );
+
+
+      gameScreen
+        ?.classList.remove(
+          'hidden'
+        );
+
+
+      $('connMode').textContent =
+        t('game.modeSpectate');
+
+
+      $('myRole').textContent =
+        window.GoChat?.getName?.() ||
+        t('chat.spectator');
+
+
+      setConnStatus(
+        t('net.joined'),
+        'ok'
+      );
+
+
+      addLog(
+        t('net.spectateSync'),
+        'good'
+      );
+
+
+      reconnectAttempts = 0;
+
+
+      setTimeout(
+        () => {
+
+          setupCanvas();
+
+          drawBoard();
+
+        },
+        100
+      );
+
+
       try {
 
         conn.send(
@@ -4689,11 +6853,37 @@ $('p2pJoinStatus').textContent =
 
 /* =========================================================
    i18n: 語言切換時刷新對局中的動態文字
-========================================================= */
-
-window.addEventListener(
+========================================================= */window.addEventListener(
   'go:langchange',
   () => {
+
+    /*
+     * 連線狀態徽章:由譯文反查回詞條者
+     * 一律重繪,避免混雜新舊語言
+     */
+    if (
+      connStatusRef &&
+      connStatusRef.key
+    ) {
+
+      setConnStatus(
+        t(connStatusRef.key),
+        connStatusRef.cls
+      );
+    }
+
+    if (
+      p2pStatusRef &&
+      p2pStatusRef.key
+    ) {
+
+      setP2PStatus(
+        p2pStatusRef.which,
+        t(p2pStatusRef.key),
+        p2pStatusRef.cls
+      );
+    }
+
 
     if (
       !gameScreen ||
@@ -4708,19 +6898,41 @@ window.addEventListener(
     $('connMode').textContent =
       mode === 'hotseat'
         ? t('game.modeLocal')
-        : t('game.modeP2p');
+        : mode === 'spectate'
+          ? t('game.modeSpectate')
+          : t('game.modeP2p');
 
 
     $('myRole').textContent =
       mode === 'hotseat'
         ? t('dyn.roleShared')
-        : (
-            myColor === BLACK
-              ? t('dyn.roleBlack')
-              : t('dyn.roleWhite')
-          );
+        : mode === 'spectate'
+          ? (
+              window.GoChat?.getName?.() ||
+              t('chat.spectator')
+            )
+          : (
+              myColor === BLACK
+                ? t('dyn.roleBlack')
+                : t('dyn.roleWhite')
+            );
 
 
     updateUI();
+  }
+);
+
+
+/* =========================================================
+   皮膚切換:即時重繪棋盤
+========================================================= */
+
+window.addEventListener(
+  'go:skinchange',
+  () => {
+
+    if (game) {
+      drawBoard();
+    }
   }
 );

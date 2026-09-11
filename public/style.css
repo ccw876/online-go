@@ -419,8 +419,60 @@ body{
 
 .sound-detail{margin-top:2px}
 .sound-detail.disabled{opacity:.45;pointer-events:none}
+.sound-detail + .setting-row{border-top:1px solid var(--line)}
 
 .vol-slider{width:140px;accent-color:var(--primary);cursor:pointer}
+
+/* 衣櫥 */
+.header-btn.wb{right:92px}
+.wardrobe-modal{max-width:560px}
+.wardrobe-tabs{margin-bottom:14px}
+.skin-preview-card canvas{height:96px}
+.skin-thumb canvas{width:56px;height:28px}
+.wardrobe-soon{
+  padding:46px 20px;text-align:center;
+  border:1px dashed var(--line-strong);border-radius:9px;
+  background:var(--surface-2);
+  color:var(--text-3);
+}
+.wardrobe-soon svg{width:40px;height:40px;opacity:0.45;margin-bottom:10px}
+.soon-text{font-size:14px;font-weight:600;color:var(--text-2)}
+.soon-sub{font-size:12px;color:var(--text-3);margin-top:4px}
+
+/* 皮膚:大預覽 + 縮圖橫向選條 */
+.setting-block{padding:10px 0;border-top:1px solid var(--line)}
+.skin-preview-card{
+  position:relative;margin-top:9px;
+  border:1px solid var(--line);border-radius:9px;overflow:hidden;
+}
+.skin-preview-card canvas{
+  width:100%;height:72px;display:block;
+}
+.skin-preview-name{
+  position:absolute;left:10px;bottom:8px;
+  background:rgba(20,22,26,0.55);color:#fff;
+  padding:2px 12px;border-radius:999px;
+  font-size:12px;font-weight:600;
+  backdrop-filter:blur(2px);
+}
+.skin-strip{
+  display:flex;gap:7px;margin-top:8px;
+  overflow-x:auto;padding-bottom:4px;
+}
+.skin-strip::-webkit-scrollbar{height:4px}
+.skin-strip::-webkit-scrollbar-thumb{border-radius:2px}
+.skin-thumb{
+  flex:0 0 auto;
+  background:var(--surface-2);border:1px solid var(--line);
+  border-radius:7px;padding:3px;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s;
+}
+.skin-thumb:hover{border-color:var(--line-strong)}
+.skin-thumb canvas{width:48px;height:24px;display:block;border-radius:4px}
+.skin-thumb.checked{
+  border-color:var(--primary);
+  box-shadow:inset 0 0 0 1px var(--primary);
+}
 
 @media (max-width:640px){
   #app{padding:16px 12px}
@@ -434,6 +486,21 @@ body{
 ============================================================ */
 .chat-card{padding:12px}
 .chat-head{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+
+/* 觀戰:改名欄(僅觀戰模式顯示) */
+.chat-name-row{
+  display:flex;align-items:center;gap:8px;
+  padding-bottom:8px;border-bottom:1px solid var(--line);
+}
+.chat-name-label{font-size:12px;color:var(--text-3);flex-shrink:0}
+.chat-name-input{
+  flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-sm);color:var(--text);padding:6px 10px;
+  font-size:12.5px;outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.chat-name-input:focus{border-color:var(--info);box-shadow:0 0 0 3px var(--focus-ring)}
+.chat-name-input::placeholder{color:var(--text-3)}
 .chat-title{
   font-size:13px;font-weight:600;
   display:inline-flex;align-items:center;gap:6px;

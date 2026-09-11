@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260912n">
 </head>
 
 <body>
@@ -84,6 +84,78 @@
         <input type="checkbox" id="sndMsg" checked>
         <span data-i18n="sound.msg">訊息音</span>
       </label>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-label" data-i18n="settings.jukebox">唱片機</div>
+      <label class="switch">
+        <input type="checkbox" id="jbOn">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== 衣櫥 ==================== -->
+<div id="wardrobeOverlay" class="modal-overlay hidden">
+  <div class="modal wardrobe-modal">
+
+    <div class="modal-head">
+      <div class="modal-title" data-i18n="wardrobe.title">衣櫥</div>
+      <button type="button" id="wardrobeClose" class="icon-btn" aria-label="關閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="segmented wardrobe-tabs" id="wardrobeTabs">
+      <button type="button" class="checked" data-tab="stone" data-i18n="wardrobe.stones">棋子皮膚</button>
+      <button type="button" data-tab="board" data-i18n="wardrobe.boards">棋盤皮膚</button>
+    </div>
+
+    <!-- 棋子皮膚 -->
+    <div id="wardrobeStonePanel">
+      <div class="skin-preview-card">
+        <canvas id="skinPreviewMain" width="480" height="96"></canvas>
+        <div class="skin-preview-name" id="skinPreviewName">經典</div>
+      </div>
+      <div class="skin-strip" id="skinSeg">
+        <button type="button" class="skin-thumb checked" data-value="classic" data-i18n-title="skin.classic">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="pig" data-i18n-title="skin.pig">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="shiba" data-i18n-title="skin.shiba">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="cat" data-i18n-title="skin.cat">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="panda" data-i18n-title="skin.panda">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="galaxy" data-i18n-title="skin.galaxy">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb" data-value="math" data-i18n-title="skin.math">
+          <canvas width="56" height="28"></canvas>
+        </button>
+      </div>
+    </div>
+
+    <!-- 棋盤皮膚:敬請期待 -->
+    <div id="wardrobeBoardPanel" class="hidden">
+      <div class="wardrobe-soon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
+        </svg>
+        <div class="soon-text" data-i18n="wardrobe.boardSoon">棋盤皮膚敬請期待</div>
+        <div class="soon-sub" data-i18n="wardrobe.boardSoonSub">木紋、石盤、星空棋盤主題製作中</div>
+      </div>
     </div>
 
   </div>
@@ -162,7 +234,7 @@
     <button type="button" id="jbClear" class="btn small ghost" data-i18n="jb.clear">清空</button>
   </div>
 
-  <input type="file" id="jbFiles" class="hidden" multiple accept=".mp4,video/mp4">
+  <input type="file" id="jbFiles" class="hidden" multiple accept=".mp4,.mp3,video/mp4,audio/mpeg">
   <input type="file" id="jbFolder" class="hidden" webkitdirectory>
 
 </div>
@@ -170,7 +242,12 @@
 <div id="app">
 
   <header class="app-header">
-    <button type="button" id="jukeboxBtn" class="icon-btn header-btn jb" data-i18n-title="jb.title" aria-label="唱片機">
+    <button type="button" id="wardrobeBtn" class="icon-btn header-btn wb" data-i18n-title="wardrobe.title" aria-label="衣櫥">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>
+      </svg>
+    </button>
+    <button type="button" id="jukeboxBtn" class="icon-btn header-btn jb hidden" data-i18n-title="jb.title" aria-label="唱片機">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
         <circle cx="12" cy="12" r="8.5"/>
         <circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/>
@@ -362,6 +439,10 @@
             加入
           </button>
 
+          <button id="submitSpectateBtn" class="btn ghost big" data-i18n="join.spectate">
+            觀戰加入
+          </button>
+
         </div>
 
         <div id="p2pJoinStatus" class="status">
@@ -525,18 +606,21 @@
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <!-- 多語系 / 音效 / 設置(需在 app.js 之前載入) -->
-<script src="i18n.js"></script>
-<script src="sound.js"></script>
-<script src="settings.js"></script>
+<script src="i18n.js?v=20260912n"></script>
+<script src="sound.js?v=20260912n"></script>
+<script src="settings.js?v=20260912n"></script>
 
 <!-- 遊戲程式 -->
-<script src="app.js"></script>
+<script src="app.js?v=20260912n"></script>
 
 <!-- 對局聊天（新增模組，掛接 app.js 全域連線） -->
-<script src="chat.js"></script>
+<script src="chat.js?v=20260912n"></script>
 
 <!-- 唱片機（MP4 循環播放） -->
-<script src="jukebox.js"></script>
+<script src="jukebox.js?v=20260912n"></script>
+
+<!-- 衣櫥（皮膚管理） -->
+<script src="wardrobe.js?v=20260912n"></script>
 
 </body>
 </html>

@@ -14,6 +14,8 @@
   const DEFAULTS = {
     theme: 'light',
     lang: 'zh-TW',
+    jukebox: false,
+    skin: 'classic',
     sound: { on: true, volume: 0.7, stone: true, capture: true, msg: true }
   };
 
@@ -46,11 +48,23 @@
     }
   }
 
+  /* 唱片機:默認關閉且不可見,設置裡開啟後全域可見 */
+  function applyJukebox() {
+    const btn = document.getElementById('jukeboxBtn');
+    if (!btn) return;
+    btn.classList.toggle('hidden', !settings.jukebox);
+    if (!settings.jukebox) {
+      document.getElementById('jukeboxPanel')?.classList.remove('open');
+    }
+  }
+
   window.GoSettings = {
     get: () => settings,
     set(patch) {
       let themeChanged = false;
       let langChanged = false;
+      let jukeboxChanged = false;
+      let skinChanged = false;
 
       if (patch.theme && patch.theme !== settings.theme) {
         settings.theme = patch.theme;
@@ -60,17 +74,36 @@
         settings.lang = patch.lang;
         langChanged = true;
       }
+      if (
+        patch.jukebox !== undefined &&
+        !!patch.jukebox !== !!settings.jukebox
+      ) {
+        settings.jukebox = !!patch.jukebox;
+        jukeboxChanged = true;
+      }
+      if (
+        patch.skin &&
+        patch.skin !== settings.skin
+      ) {
+        settings.skin = patch.skin;
+        skinChanged = true;
+      }
       if (patch.sound) {
         settings.sound = { ...settings.sound, ...patch.sound };
       }
 
       save();
       if (themeChanged) applyTheme();
+      if (jukeboxChanged) applyJukebox();
+      if (skinChanged) {
+        window.dispatchEvent(new CustomEvent('go:skinchange'));
+      }
       if (langChanged && window.I18N) window.I18N.setLang(settings.lang);
     }
   };
 
   applyTheme();
+  applyJukebox();
 
   /* ---------------- 設置面板 ---------------- */
 
@@ -100,6 +133,7 @@
     if ($('sndStone')) $('sndStone').checked = settings.sound.stone !== false;
     if ($('sndCapture')) $('sndCapture').checked = settings.sound.capture !== false;
     if ($('sndMsg')) $('sndMsg').checked = settings.sound.msg !== false;
+    if ($('jbOn')) $('jbOn').checked = !!settings.jukebox;
 
     const detail = $('soundDetail');
     if (detail) detail.classList.toggle('disabled', !settings.sound.on);
@@ -162,6 +196,10 @@
     $('sndMsg')?.addEventListener('change', e => {
       window.GoSettings.set({ sound: { msg: e.target.checked } });
       if (e.target.checked) window.GoSound?.play('msg');
+    });
+
+    $('jbOn')?.addEventListener('change', e => {
+      window.GoSettings.set({ jukebox: e.target.checked });
     });
   }
 

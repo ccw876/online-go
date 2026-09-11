@@ -10,7 +10,7 @@
   'use strict';
 
   const PREFS_KEY = 'goJukebox.v1';
-  const MEDIA_RE = /\.mp4$/i;
+  const MEDIA_RE = /\.(mp4|mp3)$/i;
 
   const $ = (id) => document.getElementById(id);
 
@@ -135,6 +135,60 @@
     if (wasEmpty) loadTrack(0, true);
   }
 
+  /* ---------------- 檔案輸入重置 ---------------- */
+
+  /*
+   * 只允許「按下選擇按鈕」後一段時間內的挑選生效:
+   * Chrome 重新整理後會做表單還原,把上次的資料夾
+   * 選擇填回輸入框並自動補發 change——這道防線
+   * 擋掉這種非使用者操作的自動讀取。
+   */
+  let pickArmedAt = 0;
+  const PICK_WINDOW = 10 * 60 * 1000;
+
+  function armPick() {
+    pickArmedAt = Date.now();
+  }
+
+  function resetInput(input) {
+    if (!input) return;
+
+    try {
+      const dt = new DataTransfer();
+      input.files = dt.files;
+    } catch (e) {
+      try { input.value = ''; } catch (e2) {}
+    }
+
+    /*
+     * 換上全新的輸入框:Chrome 對 webkitdirectory
+     * 輸入框用 value='' 清不乾淨,舊節點會一直
+     * 參照著資料夾;換新節點徹底丟掉參照。
+     */
+    const clone = input.cloneNode(false);
+    clone.value = '';
+    input.replaceWith(clone);
+  }
+
+  function handlePick(e) {
+    const input = e.target;
+    const id = input && input.id;
+
+    if (id !== 'jbFiles' && id !== 'jbFolder') return;
+
+    if (Date.now() - pickArmedAt > PICK_WINDOW) {
+      // 非使用者操作(例如重新整理後的還原),直接丟棄
+      resetInput(input);
+      return;
+    }
+
+    if (input.files && input.files.length) {
+      addFiles(input.files);
+    }
+
+    resetInput(input);
+  }
+
   function clearAll() {
     pause();
     if (video) video.removeAttribute('src');
@@ -146,6 +200,8 @@
     playlist = [];
     index = -1;
     errStreak = 0;
+    resetInput($('jbFiles'));
+    resetInput($('jbFolder'));
     renderList();
     updateInfo();
     setPlayingUI(false);
@@ -259,17 +315,19 @@
       panel.classList.remove('open');
     });
 
-    $('jbPickFilesBtn')?.addEventListener('click', () => $('jbFiles')?.click());
-    $('jbPickFolderBtn')?.addEventListener('click', () => $('jbFolder')?.click());
+    /*
+     * 用委派監聽:輸入框被換新後依然有效
+     */
+    document.addEventListener('change', handlePick);
 
-    $('jbFiles')?.addEventListener('change', (e) => {
-      addFiles(e.target.files);
-      e.target.value = '';
+    $('jbPickFilesBtn')?.addEventListener('click', () => {
+      armPick();
+      $('jbFiles')?.click();
     });
 
-    $('jbFolder')?.addEventListener('change', (e) => {
-      addFiles(e.target.files);
-      e.target.value = '';
+    $('jbPickFolderBtn')?.addEventListener('click', () => {
+      armPick();
+      $('jbFolder')?.click();
     });
 
     $('jbPlay')?.addEventListener('click', togglePlay);

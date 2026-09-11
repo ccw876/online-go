@@ -41,6 +41,7 @@
       'join.placeholder': '例如：G7XK2M',
       'join.submit': '加入',
       'join.waiting': '等待輸入邀請碼',
+      'join.spectate': '觀戰加入',
 
       'modal.confirmTitle': '確認',
       'modal.confirmBody': '是否執行此操作？',
@@ -50,6 +51,7 @@
       'game.mode': '模式',
       'game.modeLocal': '單機',
       'game.modeP2p': 'P2P 線上',
+      'game.modeSpectate': '觀戰',
       'game.you': '你是',
       'game.status': '狀態',
 
@@ -58,6 +60,9 @@
       'player.ready': '已就緒',
       'player.captures': '提子',
       'turn.blackFirst': '黑棋先行',
+      'turn.onePass': '（再虛手一次即終局）',
+      'turn.spectating': '（觀戰中）',
+      'log.pass': '{p}虛手',
       'color.black': '黑',
       'color.white': '白',
 
@@ -78,6 +83,21 @@
       'settings.lang': '語言',
       'settings.sound': '音效',
       'settings.volume': '音量',
+      'settings.jukebox': '唱片機',
+      'settings.skin': '皮膚',
+      'skin.classic': '經典',
+      'skin.pig': '小豬',
+      'skin.shiba': '柴犬',
+      'skin.cat': '貓咪',
+      'skin.panda': '貓熊',
+      'skin.galaxy': '星空',
+      'skin.math': '數學',
+
+      'wardrobe.title': '衣櫥',
+      'wardrobe.stones': '棋子皮膚',
+      'wardrobe.boards': '棋盤皮膚',
+      'wardrobe.boardSoon': '棋盤皮膚敬請期待',
+      'wardrobe.boardSoonSub': '木紋、石盤、星空棋盤主題製作中',
       'sound.stone': '落子音',
       'sound.capture': '提子音',
       'sound.msg': '訊息音',
@@ -111,6 +131,10 @@
       'dyn.turnWait': '（等待對手）',
       'dyn.gameOver': '對局結束！{w}勝 {d} 目',
 
+      'scoring.hint': '終局！如需標記死子，點擊棋子即可，比分會即時更新',
+      'result.title': '對局結果',
+      'result.body': '{w}勝 {d} 目（黑 {b} — 白 {c}）',
+
       'net.fail': '連線失敗',
       'net.failLog': '多次重新連線失敗，請確認雙方網路狀態。',
       'net.reconnecting': '正在重連 ({n}/10)',
@@ -128,12 +152,19 @@
       'net.recovering': 'P2P 暫時斷線，正在恢復...',
       'net.rebuilding': 'P2P 服務暫時中斷，正在重新連線...',
       'net.netErr': '網路異常',
+      'net.sendFailed': '訊息未送出，連線可能已中斷',
       'net.joining': '正在加入房間 {c} ...',
       'net.joined': '已加入房間',
       'net.joinedSync': '已順利連入房間！等待同步棋盤...',
+      'net.spectating': '以觀戰身分加入 {c} ...',
+      'net.spectateSync': '已加入觀戰！同步棋盤中...',
+      'log.spectateJoined': '{n} 加入觀戰',
+      'log.spectateLeft': '{n} 離開觀戰',
 
       'chat.me': '我',
       'chat.opp': '對手',
+      'chat.spectator': '觀棋者',
+      'chat.nameLabel': '你的稱呼',
       'chat.meBlack': '我（黑棋）',
       'chat.meWhite': '我（白棋）',
       'chat.oppBlack': '對手（黑棋）',
@@ -148,8 +179,8 @@
       'jb.pickFiles': '選擇檔案',
       'jb.pickFolder': '選擇資料夾',
       'jb.clear': '清空',
-      'jb.empty': '選擇裝置裡的 MP4 開始播放\n支援一次加入多個檔案',
-      'jb.noMp4': '選的檔案／資料夾裡沒有 MP4',
+      'jb.empty': '選擇裝置裡的 MP4 / MP3 開始播放\n支援一次加入多個檔案',
+      'jb.noMp4': '選的檔案／資料夾裡沒有 MP4 或 MP3',
       'jb.repeatAll': '全部循環',
       'jb.repeatOne': '單曲循環',
       'jb.play': '播放',
@@ -190,6 +221,7 @@
       'join.placeholder': 'e.g. G7XK2M',
       'join.submit': 'Join',
       'join.waiting': 'Waiting for invite code',
+      'join.spectate': 'Spectate',
 
       'modal.confirmTitle': 'Confirm',
       'modal.confirmBody': 'Perform this action?',
@@ -199,6 +231,7 @@
       'game.mode': 'Mode',
       'game.modeLocal': 'Local',
       'game.modeP2p': 'P2P Online',
+      'game.modeSpectate': 'Spectating',
       'game.you': 'You are',
       'game.status': 'Status',
 
@@ -207,6 +240,9 @@
       'player.ready': 'Ready',
       'player.captures': 'Captures',
       'turn.blackFirst': 'Black plays first',
+      'turn.onePass': ' — one more pass ends the game',
+      'turn.spectating': ' (spectating)',
+      'log.pass': '{p} passed',
       'color.black': 'Black',
       'color.white': 'White',
 
@@ -227,6 +263,21 @@
       'settings.lang': 'Language',
       'settings.sound': 'Sound',
       'settings.volume': 'Volume',
+      'settings.jukebox': 'Jukebox',
+      'settings.skin': 'Stone Skin',
+      'skin.classic': 'Classic',
+      'skin.pig': 'Piggy',
+      'skin.shiba': 'Shiba',
+      'skin.cat': 'Cat',
+      'skin.panda': 'Panda',
+      'skin.galaxy': 'Galaxy',
+      'skin.math': 'Math',
+
+      'wardrobe.title': 'Wardrobe',
+      'wardrobe.stones': 'Stone Skins',
+      'wardrobe.boards': 'Board Skins',
+      'wardrobe.boardSoon': 'Board skins coming soon',
+      'wardrobe.boardSoonSub': 'Wood, stone and galaxy board themes in the works',
       'sound.stone': 'Stone',
       'sound.capture': 'Capture',
       'sound.msg': 'Message',
@@ -260,6 +311,10 @@
       'dyn.turnWait': ' — waiting for opponent',
       'dyn.gameOver': 'Game over! {w} wins by {d} points',
 
+      'scoring.hint': 'Game over! Tap a group to toggle dead stones — the score updates live',
+      'result.title': 'Game Result',
+      'result.body': '{w} wins by {d} points (Black {b} — White {c})',
+
       'net.fail': 'Connection failed',
       'net.failLog': 'Reconnection failed repeatedly. Please check both networks.',
       'net.reconnecting': 'Reconnecting ({n}/10)',
@@ -277,12 +332,19 @@
       'net.recovering': 'P2P temporarily lost, recovering...',
       'net.rebuilding': 'P2P service interrupted, reconnecting...',
       'net.netErr': 'Network error',
+      'net.sendFailed': 'Message not sent — connection may be down',
       'net.joining': 'Joining room {c} ...',
       'net.joined': 'Joined room',
       'net.joinedSync': 'Joined the room! Waiting for board sync...',
+      'net.spectating': 'Joining {c} as spectator ...',
+      'net.spectateSync': 'Spectating! Syncing the board...',
+      'log.spectateJoined': '{n} started spectating',
+      'log.spectateLeft': '{n} stopped spectating',
 
       'chat.me': 'Me',
       'chat.opp': 'Opponent',
+      'chat.spectator': 'Spectator',
+      'chat.nameLabel': 'Your name',
       'chat.meBlack': 'Me (Black)',
       'chat.meWhite': 'Me (White)',
       'chat.oppBlack': 'Opponent (Black)',
@@ -297,8 +359,8 @@
       'jb.pickFiles': 'Choose files',
       'jb.pickFolder': 'Choose folder',
       'jb.clear': 'Clear',
-      'jb.empty': 'Pick MP4 files from your device to start\nAdd as many as you like',
-      'jb.noMp4': 'No MP4 files found in that selection',
+      'jb.empty': 'Pick MP4 or MP3 files from your device to start\nAdd as many as you like',
+      'jb.noMp4': 'No MP4 or MP3 files found in that selection',
       'jb.repeatAll': 'Repeat all',
       'jb.repeatOne': 'Repeat one',
       'jb.play': 'Play',
@@ -316,6 +378,20 @@
     const s = JSON.parse(localStorage.getItem('goSettings.v1') || 'null');
     if (s && DICT[s.lang]) current = s.lang;
   } catch (e) {}
+
+  /* 反查表:由譯文找回詞條 key,
+     供動態狀態文字在語言切換時重繪 */
+  const REVERSE = {};
+  for (const lang of Object.keys(DICT)) {
+    for (const k of Object.keys(DICT[lang])) {
+      const v = DICT[lang][k];
+      if (!(v in REVERSE)) REVERSE[v] = k;
+    }
+  }
+
+  function keyOf(text) {
+    return (text != null && REVERSE[text]) || null;
+  }
 
   function t(key, params) {
     let s = DICT[current][key];
@@ -358,6 +434,7 @@
     t,
     apply,
     setLang,
+    keyOf,
     lang: () => current,
     locale: () => (current === 'en' ? 'en-US' : 'zh-TW')
   };
