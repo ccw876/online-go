@@ -1665,7 +1665,10 @@ function drawBoard() {
 
   /* Last move */
 
-  if (game.lastMove) {
+  const markerStyle =
+    window.GoSettings?.get?.().marker || 'ring';
+
+  if (game.lastMove && markerStyle === 'ring') {
 
     const {
       x,
@@ -1704,6 +1707,16 @@ function drawBoard() {
 
     ctx.stroke();
   }
+
+
+  /* 最後一手標記:動態樣式(pulse/blink/spin)
+     交給特效覆蓋層逐格驅動 */
+  window.GoFX?.setMarker(
+    markerStyle,
+    game.lastMove
+      ? { x: game.lastMove.x, y: game.lastMove.y }
+      : null
+  );
 
 
   /* Ko */
@@ -1766,39 +1779,20 @@ function drawBoard() {
       )
     ) {
 
-      const cx =
-        margin +
-        x * cellSize;
-
-
-      const cy =
-        margin +
-        y * cellSize;
-
-
       const c =
         mode === 'hotseat'
           ? game.currentPlayer
           : myColor;
 
 
-      ctx.fillStyle =
-        c === BLACK
-          ? 'rgba(0,0,0,0.35)'
-          : 'rgba(255,255,255,0.5)';
+      /* 落子預覽:以半透明的當前皮膚棋子呈現 */
+      ctx.save();
 
+      ctx.globalAlpha = 0.45;
 
-      ctx.beginPath();
+      drawStone(x, y, c);
 
-      ctx.arc(
-        cx,
-        cy,
-        cellSize * 0.42,
-        0,
-        Math.PI * 2
-      );
-
-      ctx.fill();
+      ctx.restore();
     }
   }
 }
@@ -2975,10 +2969,27 @@ function updateSkinPreviewName() {
 }
 
 
+/*
+ * 落子特效用:棋盤格座標 → canvas 像素(CSS px)
+ */
+function boardPoint(
+  x,
+  y
+) {
+
+  return {
+    x: margin + x * cellSize,
+    y: margin + y * cellSize,
+    cell: cellSize
+  };
+}
+
+
 window.GoBoard = {
   renderSkinPreviews,
   updateSkinPreview,
-  updateSkinPreviewName
+  updateSkinPreviewName,
+  boardPoint
 };
 
 
@@ -3803,6 +3814,15 @@ function applyMoveRemote(r) {
 
       game.board[cx][cy] =
         EMPTY;
+
+      /* 提子特效:被提棋子顏色為落子方的對方 */
+      window.GoFX?.capture(
+        cx,
+        cy,
+        r.player === BLACK
+          ? WHITE
+          : BLACK
+      );
     }
   }
 
@@ -3863,6 +3883,13 @@ function applyMoveRemote(r) {
   drawBoard();
 
   saveGameToStorage();
+
+
+  window.GoFX?.stone(
+    r.x,
+    r.y,
+    r.player
+  );
 
 
   window.GoSound?.play(
@@ -3993,6 +4020,28 @@ function doMove(
   }
 
 
+  /* 提子特效:在每顆被提棋子的位置播放 */
+  if (r.captured && r.captured.length) {
+
+    const capturedColor =
+      r.player === BLACK
+        ? WHITE
+        : BLACK;
+
+    for (
+      const [cx, cy]
+      of r.captured
+    ) {
+
+      window.GoFX?.capture(
+        cx,
+        cy,
+        capturedColor
+      );
+    }
+  }
+
+
   if (r.gameOver) {
 
     addLog(
@@ -4009,6 +4058,12 @@ function doMove(
   drawBoard();
 
   saveGameToStorage();
+
+  window.GoFX?.stone(
+    r.x,
+    r.y,
+    r.player
+  );
 }
 
 

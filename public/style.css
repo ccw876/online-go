@@ -264,6 +264,7 @@ body{
 
 /* 棋盤:白/深色卡框襯托木色棋盤,讓它成為畫面焦點 */
 .board-wrap{
+  position:relative;
   aspect-ratio:1/1;
   width:100%;max-width:640px;margin:0 auto;
   background:var(--surface);border:1px solid var(--line);
@@ -271,6 +272,12 @@ body{
   box-shadow:0 2px 6px rgba(16,24,40,.06),0 16px 40px rgba(16,24,40,.12);
 }
 #boardCanvas{width:100%;height:100%;border-radius:8px;display:block;cursor:pointer}
+/* 落子特效覆蓋層:與棋盤 canvas 對齊,不攔截點擊 */
+#fxCanvas{
+  position:absolute;left:10px;top:10px;
+  width:calc(100% - 20px);height:calc(100% - 20px);
+  border-radius:8px;pointer-events:none;
+}
 
 /* 狀態資訊列 */
 .stat-row{
@@ -438,6 +445,10 @@ body{
 .wardrobe-soon svg{width:40px;height:40px;opacity:0.45;margin-bottom:10px}
 .soon-text{font-size:14px;font-weight:600;color:var(--text-2)}
 .soon-sub{font-size:12px;color:var(--text-3);margin-top:4px}
+
+/* 落子特效:版式與棋子皮膚共用 skin-preview-card / skin-strip,
+   預覽畫布需要較高以容納上升的煙霧 */
+#fxPreviewMain{height:110px}
 
 /* 皮膚:大預覽 + 縮圖橫向選條 */
 .setting-block{padding:10px 0;border-top:1px solid var(--line)}

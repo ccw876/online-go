@@ -16,6 +16,9 @@
     lang: 'zh-TW',
     jukebox: false,
     skin: 'classic',
+    fx: 'none',
+    marker: 'ring',
+    cap: 'none',
     sound: { on: true, volume: 0.7, stone: true, capture: true, msg: true }
   };
 
@@ -87,6 +90,24 @@
       ) {
         settings.skin = patch.skin;
         skinChanged = true;
+      }
+      if (
+        patch.fx &&
+        patch.fx !== settings.fx
+      ) {
+        settings.fx = patch.fx;
+      }
+      if (
+        patch.marker &&
+        patch.marker !== settings.marker
+      ) {
+        settings.marker = patch.marker;
+      }
+      if (
+        patch.cap &&
+        patch.cap !== settings.cap
+      ) {
+        settings.cap = patch.cap;
       }
       if (patch.sound) {
         settings.sound = { ...settings.sound, ...patch.sound };

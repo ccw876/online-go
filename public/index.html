@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260912n">
+<link rel="stylesheet" href="style.css?v=20260912x">
 </head>
 
 <body>
@@ -112,6 +112,9 @@
 
     <div class="segmented wardrobe-tabs" id="wardrobeTabs">
       <button type="button" class="checked" data-tab="stone" data-i18n="wardrobe.stones">棋子皮膚</button>
+      <button type="button" data-tab="fx" data-i18n="wardrobe.fx">落子特效</button>
+      <button type="button" data-tab="cap" data-i18n="wardrobe.cap">提子特效</button>
+      <button type="button" data-tab="last" data-i18n="wardrobe.last">最後一手</button>
       <button type="button" data-tab="board" data-i18n="wardrobe.boards">棋盤皮膚</button>
     </div>
 
@@ -141,6 +144,93 @@
           <canvas width="56" height="28"></canvas>
         </button>
         <button type="button" class="skin-thumb" data-value="math" data-i18n-title="skin.math">
+          <canvas width="56" height="28"></canvas>
+        </button>
+      </div>
+    </div>
+
+    <!-- 落子特效:與棋子皮膚同版式(大預覽 + 縮圖選條) -->
+    <div id="wardrobeFxPanel" class="hidden">
+      <div class="skin-preview-card">
+        <canvas id="fxPreviewMain" width="480" height="110"></canvas>
+        <div class="skin-preview-name" id="fxPreviewName">無</div>
+      </div>
+      <div class="skin-strip" id="fxSeg">
+        <button type="button" class="skin-thumb fx-thumb checked" data-value="none" data-i18n-title="fx.noneDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="qi" data-i18n-title="fx.qiDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="math" data-i18n-title="fx.mathDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="spark" data-i18n-title="fx.sparkDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="ripple" data-i18n-title="fx.rippleDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="petal" data-i18n-title="fx.petalDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="bolt" data-i18n-title="fx.boltDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+      </div>
+    </div>
+
+    <!-- 提子特效:與棋子皮膚同版式(大預覽 + 縮圖選條) -->
+    <div id="wardrobeCapPanel" class="hidden">
+      <div class="skin-preview-card">
+        <canvas id="capPreviewMain" width="480" height="110"></canvas>
+        <div class="skin-preview-name" id="capPreviewName">無</div>
+      </div>
+      <div class="skin-strip" id="capSeg">
+        <button type="button" class="skin-thumb fx-thumb checked" data-value="none" data-i18n-title="cap.noneDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="boom" data-i18n-title="cap.boomDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="shatter" data-i18n-title="cap.shatterDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="ash" data-i18n-title="cap.ashDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="dust" data-i18n-title="cap.dustDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+      </div>
+    </div>
+
+    <!-- 最後一手標記:與棋子皮膚同版式(大預覽 + 縮圖選條) -->
+    <div id="wardrobeLastPanel" class="hidden">
+      <div class="skin-preview-card">
+        <canvas id="mkPreviewMain" width="480" height="110"></canvas>
+        <div class="skin-preview-name" id="mkPreviewName">紅圈</div>
+      </div>
+      <div class="skin-strip" id="mkSeg">
+        <button type="button" class="skin-thumb fx-thumb checked" data-value="ring" data-i18n-title="mk.ringDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="pulse" data-i18n-title="mk.pulseDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="blink" data-i18n-title="mk.blinkDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="spin" data-i18n-title="mk.spinDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="stars" data-i18n-title="mk.starsDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="planet" data-i18n-title="mk.planetDesc">
+          <canvas width="56" height="28"></canvas>
+        </button>
+        <button type="button" class="skin-thumb fx-thumb" data-value="tornado" data-i18n-title="mk.tornadoDesc">
           <canvas width="56" height="28"></canvas>
         </button>
       </div>
@@ -606,21 +696,23 @@
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <!-- 多語系 / 音效 / 設置(需在 app.js 之前載入) -->
-<script src="i18n.js?v=20260912n"></script>
-<script src="sound.js?v=20260912n"></script>
-<script src="settings.js?v=20260912n"></script>
+<script src="i18n.js?v=20260912x"></script>
+<script src="sound.js?v=20260912x"></script>
+<script src="settings.js?v=20260912x"></script>
+<!-- 落子特效 -->
+<script src="fx.js?v=20260912x"></script>
 
 <!-- 遊戲程式 -->
-<script src="app.js?v=20260912n"></script>
+<script src="app.js?v=20260912x"></script>
 
 <!-- 對局聊天（新增模組，掛接 app.js 全域連線） -->
-<script src="chat.js?v=20260912n"></script>
+<script src="chat.js?v=20260912x"></script>
 
 <!-- 唱片機（MP4 循環播放） -->
-<script src="jukebox.js?v=20260912n"></script>
+<script src="jukebox.js?v=20260912x"></script>
 
 <!-- 衣櫥（皮膚管理） -->
-<script src="wardrobe.js?v=20260912n"></script>
+<script src="wardrobe.js?v=20260912x"></script>
 
 </body>
 </html>
