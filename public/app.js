@@ -1295,8 +1295,12 @@ function setP2PStatus(
 ========================================================= */
 
 function canPlay() {
-
   if (!game)
+    return false;
+
+
+  /* 回放模式純觀看 */
+  if (mode === 'replay')
     return false;
 
 
@@ -3190,6 +3194,7 @@ if (boardCanvas) {
 
       } else if (
         mode !== 'spectate' &&
+        mode !== 'replay' &&
         game &&
         game.gameOver &&
         pos &&
@@ -3392,6 +3397,47 @@ $('leaveBtn')
     'click',
     leaveGame
   );
+
+
+/* 回放控制 */
+
+$('replayPlay')
+  ?.addEventListener('click', () => replayAutoToggle());
+
+$('replayFirst')
+  ?.addEventListener('click', () => replayManual(0));
+
+$('replayPrev')
+  ?.addEventListener('click', () => replayManual((replayState?.idx ?? 0) - 1));
+
+$('replayNext')
+  ?.addEventListener('click', () => replayManual((replayState?.idx ?? 0) + 1));
+
+$('replayLast')
+  ?.addEventListener('click', () => replayManual(replayState ? replayState.record.state.history.length : 0));
+
+/* 點擊進度條跳轉到對應位置 */
+$('replayTrack')
+  ?.addEventListener('click', (e) => {
+
+    if (!replayState) return;
+
+    const track = e.currentTarget;
+    const rect = track.getBoundingClientRect();
+    const frac = rect.width
+      ? (e.clientX - rect.left) / rect.width
+      : 0;
+
+    replayManual(
+      Math.round(
+        Math.max(0, Math.min(1, frac)) *
+        replayState.record.state.history.length
+      )
+    );
+  });
+
+$('replayExit')
+  ?.addEventListener('click', () => leaveGame());
 
 
 /* =========================================================
@@ -3693,6 +3739,18 @@ function startGame(
   size,
   color
 ) {
+
+  /* 從回放直接開新對局:先退出回放,回放棋局不計戰績 */
+  const wasReplay = mode === 'replay';
+
+  /* 被取代的已完成對局:先記入戰績 */
+  if (game && game.gameOver && !wasReplay) {
+    window.GoRecords?.save(game, mode, myColor);
+  }
+
+  if (wasReplay) {
+    exitReplay();
+  }
 
   mode = m;
 
@@ -4042,6 +4100,14 @@ function doMove(
   }
 
 
+  /* 修復音效:本地落子(含熱座)也要有聲音 */
+  window.GoSound?.play(
+    r.captured && r.captured.length
+      ? 'capture'
+      : 'stone'
+  );
+
+
   if (r.gameOver) {
 
     addLog(
@@ -4097,6 +4163,9 @@ function announceResult() {
     body,
     'good'
   );
+
+  /* 終局:立即記入戰績(離開時若點目有更新會以同簽章覆寫) */
+  window.GoRecords?.save(game, mode, myColor);
 
   showModal(
     t('result.title'),
@@ -6688,6 +6757,12 @@ function connectAsSpectator() {
 
 function leaveGame() {
 
+  /* 回放模式:直接退出回放,不走離開對局流程 */
+  if (mode === 'replay') {
+    exitReplay();
+    return;
+  }
+
   manuallyLeaving = true;
 
   opponentLeft = false;
@@ -6747,6 +6822,11 @@ function leaveGame() {
 
       peerConn = null;
 
+      /* 完整對局(已終局)離開時記入戰績;中途退出不計 */
+      if (game && game.gameOver) {
+        window.GoRecords?.save(game, mode, myColor);
+      }
+
       game = null;
 
       mode = null;
@@ -6786,6 +6866,281 @@ function leaveGame() {
     150
   );
 }
+
+
+/* =========================================================
+   Replay(戰績回放)
+========================================================= */
+
+let replayState = null;
+
+let replayAutoTimer = 0;
+
+
+function updateReplayPlayBtn() {
+
+  const playing =
+    !!replayAutoTimer;
+
+  $('replayPlayIcon')
+    ?.classList.toggle('hidden', playing);
+
+  $('replayPauseIcon')
+    ?.classList.toggle('hidden', !playing);
+
+  const btn = $('replayPlay');
+
+  if (btn) {
+    btn.setAttribute(
+      'aria-label',
+      t(playing ? 'replay.pause' : 'replay.play')
+    );
+  }
+}
+
+
+function replayAutoStop() {
+
+  if (!replayAutoTimer) return;
+
+  clearInterval(replayAutoTimer);
+  replayAutoTimer = 0;
+
+  updateReplayPlayBtn();
+}
+
+
+function replayAutoToggle() {
+
+  if (!replayState) return;
+
+  if (replayAutoTimer) {
+    replayAutoStop();
+    return;
+  }
+
+  const total =
+    replayState.record.state.history.length;
+
+  /* 已在終局:從頭開始播放 */
+  if (replayState.idx >= total) {
+    replaySeek(0);
+  }
+
+  replayAutoTimer = setInterval(() => {
+
+    if (!replayState) {
+      replayAutoStop();
+      return;
+    }
+
+    if (replayState.idx >= replayState.record.state.history.length) {
+      replayAutoStop();
+      return;
+    }
+
+    replaySeek(replayState.idx + 1);
+
+  }, 800);
+
+  updateReplayPlayBtn();
+}
+
+
+/* 手動操作(前後步/跳轉)會先停止自動播放 */
+function replayManual(k) {
+  replayAutoStop();
+  replaySeek(k);
+}
+
+
+function startReplay(index) {
+
+  const rec =
+    window.GoRecords?.list?.()[index];
+
+  if (!rec || !rec.state) return;
+
+
+  mode = 'replay';
+
+  myColor = BLACK;
+
+  replayState = {
+    record: rec,
+    idx: 0
+  };
+
+  game = new GoGame(rec.size);
+
+
+  lobby
+    ?.classList.add('hidden');
+
+  $('recordsOverlay')
+    ?.classList.add('hidden');
+
+  gameScreen
+    ?.classList.remove('hidden');
+
+  /* 回放不提供對局操作 */
+  document
+    .querySelector('.game-layout .actions')
+    ?.classList.add('hidden');
+
+  $('replayBar')
+    ?.classList.remove('hidden');
+
+  $('connMode').textContent =
+    t('replay.mode');
+
+  $('myRole').textContent =
+    t('replay.mode');
+
+  $('messageLog').innerHTML =
+    '';
+
+  pendingUndo = false;
+
+  hoverPos = null;
+
+
+  setupCanvas();
+
+  updateUI();
+
+  drawBoard();
+
+  updateReplayBar();
+}
+
+
+function exitReplay() {
+
+  replayAutoStop();
+
+  replayState = null;
+
+  hoverPos = null;
+
+  $('replayBar')
+    ?.classList.add('hidden');
+
+  gameScreen
+    ?.classList.add('hidden');
+
+  lobby
+    ?.classList.remove('hidden');
+
+  showLobbyHome();
+
+  updateBoardSizeUI();
+
+  game = null;
+
+  mode = null;
+}
+
+
+function replaySeek(k) {
+
+  if (!replayState) return;
+
+  const total =
+    replayState.record.state.history.length;
+
+  k = Math.max(0, Math.min(total, k));
+
+  if (k === replayState.idx) {
+    updateReplayBar();
+    return;
+  }
+
+  game = new GoGame(replayState.record.size);
+
+  for (let j = 0; j < k; j++) {
+
+    const m =
+      replayState.record.state.history[j].move;
+
+    if (m.pass) {
+      game.pass();
+    } else {
+
+      const r =
+        game.place(m.x, m.y);
+
+      /* 回放音效:重現落子/提子聲 */
+      if (r.ok) {
+
+        window.GoSound?.play(
+          r.captured && r.captured.length
+            ? 'capture'
+            : 'stone'
+        );
+      }
+    }
+  }
+
+  replayState.idx = k;
+
+  updateUI();
+
+  drawBoard();
+
+  updateReplayBar();
+}
+
+
+function updateReplayBar() {
+
+  if (!replayState) return;
+
+  const total =
+    replayState.record.state.history.length;
+
+  const label = $('replayLabel');
+
+  if (label) {
+    label.textContent =
+      replayState.idx + ' / ' + total;
+  }
+
+  /* 進度條填充與滑塊 */
+  const pct =
+    total ? (replayState.idx / total) * 100 : 0;
+
+  const fill = $('replayFill');
+  if (fill) fill.style.width = pct + '%';
+
+  const knob = $('replayKnob');
+  if (knob) knob.style.left = pct + '%';
+
+  const atEnd = replayState.idx >= total;
+
+  $('replayFirst').disabled =
+    replayState.idx <= 0;
+
+  $('replayPrev').disabled =
+    replayState.idx <= 0;
+
+  $('replayNext').disabled =
+    atEnd;
+
+  $('replayLast').disabled =
+    atEnd;
+
+  const res = $('replayResult');
+
+  if (res) {
+    res.textContent = atEnd
+      ? window.GoRecords?.resultText?.(replayState.record) || ''
+      : '';
+  }
+}
+
+
+window.GoReplay = { start: startReplay };
 
 
 /* =========================================================

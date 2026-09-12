@@ -261,6 +261,8 @@ body{
   .game-layout{grid-template-columns:1fr}
 }
 .side{display:flex;flex-direction:column;gap:12px}
+/* 棋盤欄:棋盤 + 回放控制條(控制條不遮擋棋盤) */
+.board-col{display:flex;flex-direction:column;min-width:0}
 
 /* 棋盤:白/深色卡框襯托木色棋盤,讓它成為畫面焦點 */
 .board-wrap{
@@ -431,7 +433,9 @@ body{
 .vol-slider{width:140px;accent-color:var(--primary);cursor:pointer}
 
 /* 衣櫥 */
-.header-btn.wb{right:46px}
+.header-btn.wb{right:92px}
+/* 戰績(鐘錶):位於唱片機原本的位置 */
+.header-btn.rp{right:46px}
 .wardrobe-modal{max-width:560px}
 .wardrobe-tabs{margin-bottom:14px}
 .skin-preview-card canvas{height:96px}
@@ -449,6 +453,85 @@ body{
 /* 落子特效:版式與棋子皮膚共用 skin-preview-card / skin-strip,
    預覽畫布需要較高以容納上升的煙霧 */
 #fxPreviewMain{height:110px}
+
+/* 戰績彈窗 */
+.records-modal{max-width:520px}
+.records-sub{font-size:12px;color:var(--text-3);margin:-6px 0 12px}
+.records-list{display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto}
+.record-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border:1px solid var(--line);border-radius:9px;
+  background:var(--surface);
+}
+.record-main{flex:1;min-width:0}
+.record-line1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.record-result{font-weight:700;font-size:14px}
+.record-result.win{color:var(--ok)}
+.record-result.lose{color:var(--err)}
+.record-meta{
+  font-size:11px;color:var(--text-2);
+  padding:1px 7px;border:1px solid var(--line);border-radius:999px;
+}
+.record-date{margin-left:auto;font-size:11px;color:var(--text-3)}
+.record-line2{margin-top:3px;font-size:12px;color:var(--text-3)}
+
+/* 回放控制條(排於棋盤下方,不遮擋棋盤) */
+.replay-bar{
+  display:flex;align-items:center;gap:7px;
+  margin:10px auto 0;
+  padding:8px 12px;border-radius:14px;
+  background:rgba(20,22,26,.82);color:#fff;
+  backdrop-filter:blur(6px);z-index:6;
+  box-shadow:0 6px 20px rgba(0,0,0,.28);
+  max-width:100%;
+}
+.replay-play{
+  display:flex;align-items:center;justify-content:center;flex:none;
+  width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--primary);color:#fff;
+  transition:transform .12s,background .15s;
+}
+.replay-play:hover{background:var(--primary-hover);transform:scale(1.06)}
+.replay-play svg{width:14px;height:14px}
+.replay-bar .icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:26px;height:26px;padding:0;border:0;border-radius:6px;
+  background:transparent;color:#fff;cursor:pointer;
+}
+.replay-bar .icon-btn:hover{background:rgba(255,255,255,.16)}
+.replay-bar .icon-btn:disabled{opacity:.32;cursor:default}
+.replay-bar .icon-btn:disabled:hover{background:transparent}
+.replay-bar .icon-btn svg{width:15px;height:15px}
+.replay-track{
+  position:relative;flex:1 1 auto;min-width:40px;height:5px;
+  background:rgba(255,255,255,.24);border-radius:999px;cursor:pointer;
+}
+.replay-track:hover{height:7px}
+.replay-fill{
+  position:absolute;left:0;top:0;height:100%;width:0%;
+  background:linear-gradient(90deg,#ffd27a,#ff9a40);
+  border-radius:999px;
+}
+.replay-knob{
+  position:absolute;top:50%;left:0%;transform:translate(-50%,-50%);
+  width:11px;height:11px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.4);
+}
+.replay-label{
+  font-size:12px;font-weight:600;color:#fff;
+  min-width:52px;text-align:center;flex:none;
+  font-variant-numeric:tabular-nums;
+}
+.replay-result{
+  font-size:12px;font-weight:600;color:#ffd27a;
+  max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.replay-bar .btn.small{
+  padding:4px 10px;font-size:12px;color:#fff;
+  border-color:rgba(255,255,255,.4);
+  white-space:nowrap;flex:none;
+}
+.replay-bar .btn.small:hover{background:rgba(255,255,255,.15)}
 
 /* 皮膚:大預覽 + 縮圖橫向選條 */
 .setting-block{padding:10px 0;border-top:1px solid var(--line)}
@@ -587,8 +670,7 @@ body{
 /* ============================================================
    唱片機
 ============================================================ */
-.header-btn.jb{right:92px}
-
+.header-btn.jb{right:138px}
 #jukeboxBtn.playing{color:var(--info);border-color:var(--info-border)}
 
 .jukebox{
